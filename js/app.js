@@ -22,6 +22,8 @@ const App = {
     I18n.setLang('zh');
     this.buildNav();
     this.cleanExpiredInbox();
+    // 读取「当日通知已生成」标记（持久化），避免刷新/重开后重复生成通知、覆盖用户的已读/删除/清空状态
+    this._inboxNotifiedKey = localStorage.getItem('bb_inbox_gen_day') || null;
     this.refreshNotifications();
     this.navigate('home');
     // 初始化云同步
@@ -621,7 +623,10 @@ const App = {
   inboxClearAll() {
     this.confirm('确认清空收件箱？所有消息将被删除，不可恢复。', () => {
       Store.save('inbox', []);
-      // 不重置 _inboxNotifiedKey，避免 refreshNotifications 立即重新生成自动通知
+      // 标记「当日已生成通知」为今天，确保当天内不再自动重新生成（满足"清空后刷新不复发"）
+      const today = Utils.today();
+      this._inboxNotifiedKey = today;
+      localStorage.setItem('bb_inbox_gen_day', today);
       this.renderInboxDetail();
       this.showToast('收件箱已清空', 'success');
     }, '清空收件箱');
@@ -750,6 +755,9 @@ const App = {
       newItems.forEach(item => { maxId++; item.id = maxId; });
       Store.save('inbox', [...kept, ...newItems]);
     }
+    // 记录「当日已生成通知」并持久化：当天内不再重复生成，保留用户已读/删除/清空状态（满足"清空刷新不复发"）
+    this._inboxNotifiedKey = today;
+    localStorage.setItem('bb_inbox_gen_day', today);
   },
 
   /* ===== 快速记录（直连业务模块） ===== */
