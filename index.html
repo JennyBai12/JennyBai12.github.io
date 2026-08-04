@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0">
+  <meta name="theme-color" content="#E2EBDF">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="白白的日记">
+  <link rel="manifest" href="manifest.json">
+  <link rel="apple-touch-icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='22' fill='%23829E8E'/%3E%3Ctext x='50' y='68' font-size='52' text-anchor='middle'%3E📖%3C/text%3E%3C/svg%3E">
+  <title>白白的日记</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<div id="app">
+
+  <!-- ===== 左侧侧边栏（桌面端） ===== -->
+  <aside class="sidebar" id="sidebar">
+    <div class="sidebar-header" onclick="App.navigate('home')">
+      <span class="sidebar-logo">📖</span>
+      <span class="sidebar-title" data-i18n="appName">白白的日记</span>
+    </div>
+    <nav class="sidebar-nav" id="sidebar-nav"></nav>
+    <div class="sidebar-footer">
+      <button class="lang-btn" onclick="App.toggleLang()">
+        <span id="lang-label">EN</span>
+      </button>
+    </div>
+  </aside>
+
+  <!-- ===== 主区域 ===== -->
+  <main class="main">
+    <header class="topbar">
+      <button class="menu-btn mobile-only" onclick="App.toggleSidebar()">☰</button>
+      <h1 class="topbar-title" id="page-title">首页</h1>
+      <div class="topbar-right">
+        <span id="sync-status" class="sync-badge sync-offline" onclick="App.showLogin()">☁️ 未登录</span>
+        <button class="lang-btn mobile-only" onclick="App.toggleLang()">
+          <span id="lang-label-m">EN</span>
+        </button>
+      </div>
+    </header>
+    <div class="content" id="content"></div>
+  </main>
+
+  <!-- ===== 底部导航（移动端） ===== -->
+  <nav class="bottom-nav" id="bottom-nav"></nav>
+
+  <!-- ===== 悬浮快速记录按钮 ===== -->
+  <button class="fab" onclick="App.showQuickRecord()">
+    <span>＋</span>
+  </button>
+
+  <!-- ===== 快速记录弹窗 ===== -->
+  <div class="modal-overlay hidden" id="qr-modal">
+    <div class="modal sheet">
+      <div class="modal-handle"></div>
+      <div class="modal-title" data-i18n="quickRecord">快速记录</div>
+      <div class="form-group">
+        <label class="form-label">记到哪个模块</label>
+        <div class="qr-target-pick" id="qr-targets"></div>
+        <div class="qr-target-hint" id="qr-hint"></div>
+      </div>
+      <div class="form-group">
+        <label class="form-label" id="qr-content-label">内容</label>
+        <textarea id="qr-content" placeholder="随手记一笔..." maxlength="500"></textarea>
+      </div>
+      <div id="qr-extra"></div>
+      <div class="modal-actions">
+        <button class="btn-cancel" onclick="App.hideQuickRecord()" data-i18n="cancel">取消</button>
+        <button class="btn-confirm" id="qr-save-btn" onclick="App.saveQuickRecord()">保存</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== 通用弹窗容器 ===== -->
+  <div class="modal-overlay hidden" id="generic-modal" onclick="if(event.target===this)App.closeModal()"></div>
+
+  <!-- ===== 确认弹窗 ===== -->
+  <div class="modal-overlay hidden" id="confirm-modal" onclick="if(event.target===this)App.closeConfirm()">
+    <div class="modal confirm-modal">
+      <div class="confirm-title" id="confirm-title">确认</div>
+      <div class="confirm-msg" id="confirm-msg"></div>
+      <div class="modal-actions">
+        <button class="btn-cancel" onclick="App.closeConfirm()" data-i18n="cancel">取消</button>
+        <button class="btn-danger" id="confirm-ok-btn">确定</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== 图片查看器 ===== -->
+  <div class="img-viewer hidden" id="img-viewer" onclick="App.closeImageViewer()">
+    <button class="img-viewer-close">✕</button>
+    <button class="img-viewer-download" onclick="event.stopPropagation();App.downloadCurrentImg()">⬇</button>
+    <img id="img-viewer-img" src="" alt="">
+  </div>
+
+  <!-- ===== Toast ===== -->
+  <div class="toast hidden" id="toast"></div>
+
+  <!-- ===== 登录弹窗 ===== -->
+  <div class="modal-overlay hidden" id="login-modal" onclick="if(event.target===this)App.closeLogin()">
+    <div class="modal">
+      <div class="login-logo">📖</div>
+      <div class="login-title">白白的日记</div>
+      <div class="login-subtitle">云端同步 · 多设备共享</div>
+
+      <!-- 邮箱登录表单 -->
+      <div id="form-email">
+        <div class="phone-sub-tabs">
+          <button class="phone-sub-tab active" id="email-sub-pwd" onclick="App.switchEmailMode('pwd')">密码登录</button>
+          <button class="phone-sub-tab" id="email-sub-otp" onclick="App.switchEmailMode('otp')">验证码登录</button>
+        </div>
+
+        <!-- 密码登录模式 -->
+        <div id="email-pwd-form">
+          <div class="form-group">
+            <label class="form-label">邮箱</label>
+            <input type="email" id="login-email" placeholder="your@email.com">
+          </div>
+          <div class="form-group">
+            <label class="form-label">密码</label>
+            <input type="password" id="login-password" placeholder="至少 6 位" minlength="6">
+          </div>
+          <div class="login-actions">
+            <button class="btn-cancel" onclick="App.closeLogin()">取消</button>
+            <button class="btn-outline" onclick="App.doRegister()">注册</button>
+            <button class="btn-confirm" onclick="App.doLogin()">登录</button>
+          </div>
+        </div>
+
+        <!-- 验证码登录模式 -->
+        <div id="email-otp-form" style="display:none">
+          <div class="form-group">
+            <label class="form-label">邮箱</label>
+            <input type="email" id="login-email-otp" placeholder="your@email.com">
+          </div>
+          <div class="form-group">
+            <label class="form-label">验证码</label>
+            <div class="code-input-row">
+              <input type="text" id="login-email-code" placeholder="请输入验证码" maxlength="6">
+              <button class="btn-send-code" id="btn-send-email-code" onclick="App.sendEmailCode()">获取验证码</button>
+            </div>
+          </div>
+          <div class="login-actions">
+            <button class="btn-cancel" onclick="App.closeLogin()">取消</button>
+            <button class="btn-confirm" onclick="App.doEmailOtpLogin()">登录</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="login-tip" id="login-tip"></div>
+      <div class="login-info">
+        <div class="text-sm text-light">💡 登录后数据自动云端同步</div>
+        <div class="text-sm text-light">💡 不登录也可本地使用</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="js/i18n.js"></script>
+<script src="js/store.js"></script>
+<script src="js/cloud.js"></script>
+<script src="js/charts.js"></script>
+<script src="js/utils.js"></script>
+<script src="js/app.js"></script>
+<script src="js/mod-habits.js"></script>
+<script src="js/mod-study.js"></script>
+<script src="js/mod-health.js"></script>
+<script src="js/mod-work.js"></script>
+<script src="js/mod-news.js"></script>
+<script src="js/mod-diary.js"></script>
+<script src="js/mod-wardrobe.js"></script>
+<script src="js/mod-goods.js"></script>
+<script src="js/mod-savings.js"></script>
+<script src="js/mod-reminders.js"></script>
+</body>
+</html>
