@@ -40,6 +40,11 @@ const I18n = {
       changeLog: '变动记录', noChangeLog: '无变动记录',
       exportCsv: '导出CSV', exportBackup: '一键备份', importData: '导入数据',
       plants: '花花草草', media: '影音记录',
+      calendar: '日历', todayOverview: '今日全域统计', openCalendar: '打开日历',
+      calMonth: '月', calWeek: '周', calDay: '日',
+      calFilterWork: '工作', calFilterHealth: '健康', calFilterLife: '生活',
+      dayReview: '当日复盘', unfinishedSummary: '未完成总结', nextDayPreview: '次日任务预告',
+      allDone: '今日全部完成，太棒了！', calNewTask: '新建任务',
     },
     en: {
       appName: "Baibai's Diary", quickRecord: 'Quick Note', content: 'Content', tag: 'Tag',
@@ -79,6 +84,11 @@ const I18n = {
       changeLog: 'Change Log', noChangeLog: 'No change log',
       exportCsv: 'Export CSV', exportBackup: 'Backup All', importData: 'Import',
       plants: 'Plants', media: 'Media',
+      calendar: 'Calendar', todayOverview: "Today's Overview", openCalendar: 'Open Calendar',
+      calMonth: 'Month', calWeek: 'Week', calDay: 'Day',
+      calFilterWork: 'Work', calFilterHealth: 'Health', calFilterLife: 'Life',
+      dayReview: 'Daily Review', unfinishedSummary: 'Unfinished', nextDayPreview: 'Next Day Preview',
+      allDone: 'All done today, great!', calNewTask: 'New Task',
     }
   },
   t(key) { return (this.dict[this.lang] && this.dict[this.lang][key]) || key; },

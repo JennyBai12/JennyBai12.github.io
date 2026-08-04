@@ -14,6 +14,7 @@ const App = {
     { id: 'goods', icon: '📦', label: 'goods' },
     { id: 'savings', icon: '💰', label: 'savings' },
     { id: 'reminders', icon: '⏰', label: 'reminders' },
+    { id: 'calendar', icon: '📅', label: 'calendar' },
   ],
 
   init() {
@@ -284,15 +285,15 @@ const App = {
     else if (m === 'goods' && typeof GoodsMod !== 'undefined') GoodsMod.render(c);
     else if (m === 'savings' && typeof SavingsMod !== 'undefined') SavingsMod.render(c);
     else if (m === 'reminders' && typeof RemindersMod !== 'undefined') RemindersMod.render(c);
+    else if (m === 'calendar' && typeof CalendarMod !== 'undefined') CalendarMod.render(c);
     else c.innerHTML = `<div class="empty-state"><div class="empty-icon">🔧</div>模块开发中...</div>`;
   },
 
   /* ===== 首页 ===== */
   renderHome(c) {
-    const todos = Store.filter('todos', t => t.status !== '已完成');
-    const doneTodos = Store.filter('todos', t => t.status === '已完成');
-    const allTodos = Store.get('todos');
-    const rate = allTodos.length > 0 ? Math.round(doneTodos.length / allTodos.length * 100) : 0;
+    const today = Utils.today();
+    const stats = TaskAgg.dayStats(today);
+    const rate = stats.rate;
     const inboxItems = Store.get('inbox').sort((a, b) => (b.date || '').localeCompare(a.date || ''));
     const inboxUnread = inboxItems.filter(i => !i.read).length;
     const inboxCount = inboxItems.length;
@@ -302,11 +303,9 @@ const App = {
     const totalDayCost = goods2.filter(g => !g.archived).reduce((s, g) => s + (g.dayCost || 0), 0);
 
     // 闲置物品
-    const today = Utils.today();
     let idleCount = 0;
     Store.get('clothes').forEach(cl => { if (!cl.archived && !cl.isSecondhand && cl.annualCount < 1) idleCount++; });
     Store.get('goods_durable_main').forEach(d => { if (!d.archived && d.cumUses < 1) idleCount++; });
-    // 花草闲置：养护中但近一年无养护记录
     const yearAgo = Utils.addDays(today, -365);
     Store.filter('plants', p => p.status === '养护中').forEach(p => {
       if (Store.filter('plant_care', c => c.plantId === p.id && c.careDate >= yearAgo).length === 0) idleCount++;
@@ -318,40 +317,43 @@ const App = {
       .filter(r => r.days >= 0 && r.days <= 30)
       .sort((a, b) => a.days - b.days);
 
-    // 今日待办 - 智能排序
+    // 今日待办（工作模块，供下方简览）
     const todayTodos = Store.filter('todos', t => t.status !== '已完成');
-    // 检查逾期
     const now0 = new Date();
     todayTodos.forEach(t => {
       if (t.status === '延期搁置' || !t.deadline) return;
       const dStr = t.deadlineTime ? `${t.deadline}T${t.deadlineTime}:00` : `${t.deadline}T23:59:59`;
       if (new Date(dStr) < now0 && !t.isOverdue) Store.update('todos', t.id, { isOverdue: true, overdueSince: Utils.today() });
     });
-    const pOrder0 = { '高': 0, '中': 1, '低': 2 };
-    todayTodos.sort((a, b) => {
-      const aO = a.isOverdue ? 1 : 0, bO = b.isOverdue ? 1 : 0;
-      if (aO !== bO) return bO - aO;
-      const aD = a.deadline ? (a.deadline + (a.deadlineTime || '24:00')) : '9999';
-      const bD = b.deadline ? (b.deadline + (b.deadlineTime || '24:00')) : '9999';
-      if (aD < bD) return -1; if (aD > bD) return 1;
-      return (pOrder0[a.priority] ?? 3) - (pOrder0[b.priority] ?? 3);
-    });
 
     c.innerHTML = `
+      <div class="section-title">📊 ${I18n.t('todayOverview')}</div>
       <div class="dash-grid">
-        <div class="dash-stat"><div class="dash-stat-num">${allTodos.length}</div><div class="dash-stat-label">${I18n.t('todoTotal')}</div></div>
-        <div class="dash-stat"><div class="dash-stat-num">${doneTodos.length}</div><div class="dash-stat-label">${I18n.t('completed')}</div></div>
-        <div class="dash-stat"><div class="dash-stat-num">${todos.length}</div><div class="dash-stat-label">${I18n.t('incomplete')}</div></div>
-        <div class="dash-stat"><div class="dash-stat-num">${rate}%</div><div class="dash-stat-label">${I18n.t('completionRate')}</div></div>
+        <div class="dash-stat clickable" onclick="App.showTodayOverview('all')">
+          <div class="dash-stat-num">${stats.total}</div><div class="dash-stat-label">${I18n.t('todoTotal')}</div>
+          <div class="dash-stat-sub">全模块当日事项</div>
+        </div>
+        <div class="dash-stat clickable" onclick="App.showTodayOverview('done')">
+          <div class="dash-stat-num">${stats.done}</div><div class="dash-stat-label">${I18n.t('completed')}</div>
+          <div class="dash-stat-sub">已办结 / 打卡完成</div>
+        </div>
+        <div class="dash-stat clickable" onclick="App.showTodayOverview('incomplete')">
+          <div class="dash-stat-num">${stats.incomplete}</div><div class="dash-stat-label">${I18n.t('incomplete')}</div>
+          <div class="dash-stat-sub">未开始 / 进行中 / 延期</div>
+        </div>
+        <div class="dash-stat clickable" onclick="App.showDayReview()">
+          <div class="dash-stat-num">${rate}%</div><div class="dash-stat-label">${I18n.t('completionRate')}</div>
+          <div class="dash-stat-sub">点击查看复盘</div>
+        </div>
       </div>
 
       <div class="two-col">
         <div class="card">
           <div class="card-title">📥 ${I18n.t('inbox')} ${inboxUnread ? `<span class="tag-small" style="background:var(--danger);color:#fff;">${inboxUnread}</span>` : `<span class="tag-small">${inboxCount}</span>`}</div>
           ${inboxItems.length > 0 ? inboxItems.slice(0, 3).map(i =>
-            `<div class="list-item ${i.read ? '' : 'inbox-unread'}" style="padding:8px 0;" onclick="App.navigate('home');App.renderInboxDetail()"><div class="list-icon" style="font-size:16px;">${i.read ? '📨' : '📩'}</div><div class="list-body"><div class="list-title" style="font-size:14px;">${Utils.escape(i.title || '')}</div><div class="list-meta">${i.type || ''} · ${(i.date || '').slice(5, 16).replace('T', ' ')}</div></div></div>`
+            `<div class="list-item ${i.read ? '' : 'inbox-unread'}" style="padding:8px 0;" onclick="App.renderInboxDetail()"><div class="list-icon" style="font-size:16px;">${i.read ? '📨' : '📩'}</div><div class="list-body"><div class="list-title" style="font-size:14px;">${Utils.escape(i.title || '')}</div><div class="list-meta">${i.type || ''} · ${(i.date || '').slice(5, 16).replace('T', ' ')}</div></div></div>`
           ).join('') : `<div class="text-light text-sm">${I18n.t('inboxEmpty')}</div>`}
-          <button class="btn btn-outline btn-sm btn-block mt-12" onclick="App.navigate('home');App.renderInboxDetail()">查看全部</button>
+          <button class="btn btn-outline btn-sm btn-block mt-12" onclick="App.renderInboxDetail()">查看全部</button>
         </div>
 
         <div class="card">
@@ -364,6 +366,11 @@ const App = {
       </div>
 
       <div class="card">
+        <div class="card-title">📅 ${I18n.t('calendar')} · <span class="text-light text-sm" style="font-weight:400;">${today}</span></div>
+        <button class="btn btn-primary btn-sm btn-block" onclick="App.navigate('calendar')">🗓️ ${I18n.t('openCalendar')}</button>
+      </div>
+
+      <div class="card">
         <div class="card-title">⏰ ${I18n.t('upcomingReminders')}</div>
         ${reminders.length > 0 ? reminders.slice(0, 5).map(r =>
           `<div class="list-item"><div class="list-icon">${r.days <= 3 ? '🔔' : '📅'}</div><div class="list-body"><div class="list-title">${Utils.escape(r.name)}</div><div class="list-meta">${r.date} · ${r.days === 0 ? '今天' : r.days + '天后'}</div></div>${r.days <= 3 ? '<span class="list-badge warn">临近</span>' : ''}</div>`
@@ -371,7 +378,7 @@ const App = {
       </div>
 
       <div class="card">
-        <div class="card-title">📋 ${I18n.t('todayTodos')}</div>
+        <div class="card-title">📋 ${I18n.t('todayTodos')}（工作模块）</div>
         ${todayTodos.length > 0 ? todayTodos.slice(0, 6).map(t => {
           const isOverdue = t.isOverdue;
           let dl = t.deadline || '无截止';
@@ -419,6 +426,122 @@ const App = {
             <input type="file" id="import-file" accept=".json" style="display:none" onchange="App.importData(this)">
           </div>
         `}
+      </div>
+    `;
+  },
+
+  /* 渲染单条聚合事项的列表行 */
+  _renderAggItem(i, opts) {
+    opts = opts || {};
+    const isOverdue = i.overdue;
+    const priIcon = i.priority === '高' ? '🔴' : i.priority === '中' ? '🟡' : i.priority === '低' ? '🟢' : '•';
+    const jump = i.actionModule ? `onclick="App.aggJump('${i.module}','${i.actionSub || ''}')"` : '';
+    const cursor = i.actionModule ? 'cursor:pointer;' : '';
+    const dim = i.done ? 'style="opacity:.6;"' : '';
+    return `
+      <div class="list-item agg-item ${isOverdue ? 'idle' : ''} ${i.done ? 'agg-done' : ''}" ${jump} style="${cursor}${i.done ? 'opacity:.6;' : ''}">
+        <div class="list-icon" style="background:${i.color}22;color:${i.color};">${i.icon || priIcon}</div>
+        <div class="list-body">
+          <div class="list-title">${Utils.escape(i.title)} ${isOverdue ? '<span class="tag-small" style="background:#e65100;color:white;">逾期</span>' : ''} ${i.done ? '<span class="tag-small" style="background:#829E8E;color:#fff;">✓</span>' : ''}</div>
+          <div class="list-meta">${TaskAgg.MODULE_LABELS[i.module] || ''}${i.time ? ' · ⏰ ' + i.time : ''}${i.priority ? ' · ' + i.priority + '优先级' : ''}</div>
+        </div>
+      </div>`;
+  },
+
+  /* 聚合事项点击跳转到对应模块 */
+  aggJump(module, sub) {
+    const modMap = { work: 'work', habits: 'habits', study: 'study', health: 'health', goods: 'goods', reminder: 'reminders', finance: 'savings' };
+    const target = modMap[module];
+    if (target) this.navigate(target, sub || null);
+  },
+
+  /* 当日全域清单：all / done / incomplete */
+  showTodayOverview(filter) {
+    const c = document.getElementById('content');
+    const today = Utils.today();
+    const stats = TaskAgg.dayStats(today);
+    let items = TaskAgg.sortItems(stats.items);
+    let title, desc;
+    if (filter === 'done') { items = items.filter(i => i.done); title = I18n.t('completed'); desc = `当日已完成 ${items.length} 项`; }
+    else if (filter === 'incomplete') { items = items.filter(i => !i.done); title = I18n.t('incomplete'); desc = `当日未完成 ${items.length} 项（高优先级置顶）`; }
+    else { title = I18n.t('todoTotal'); desc = `当日全模块共 ${items.length} 项`; }
+
+    // 按模块分组
+    const groups = {};
+    items.forEach(i => { (groups[i.module] = groups[i.module] || []).push(i); });
+    const order = ['work', 'habits', 'study', 'health', 'goods', 'reminder', 'finance'];
+
+    c.innerHTML = `
+      <div class="flex-between mb-12">
+        <div class="section-title" style="margin:0;">📋 ${title}</div>
+        <button class="btn btn-outline btn-sm" onclick="App.navigate('home')">← ${I18n.t('back')}</button>
+      </div>
+      <div class="text-sm text-light mb-12">${desc}</div>
+      ${items.length === 0 ? `<div class="empty-state"><div class="empty-icon">🎉</div>${I18n.t('noData')}</div>` :
+        order.filter(m => groups[m]).map(m => `
+          <div class="subsection-title">${TaskAgg.MODULE_LABELS[m]} <span class="text-light text-sm">${groups[m].length}</span></div>
+          ${groups[m].map(i => this._renderAggItem(i)).join('')}
+        `).join('')}
+    `;
+  },
+
+  /* 当日复盘页：分模块完成率 + 未完成总结 + 次日预告 */
+  showDayReview() {
+    const c = document.getElementById('content');
+    const today = Utils.today();
+    const tomorrow = Utils.addDays(today, 1);
+    const stats = TaskAgg.dayStats(today);
+
+    // 分模块完成率
+    const byMod = {};
+    stats.items.forEach(i => {
+      const m = i.module;
+      byMod[m] = byMod[m] || { total: 0, done: 0 };
+      byMod[m].total++; if (i.done) byMod[m].done++;
+    });
+    const modRows = ['work', 'habits', 'study', 'health', 'goods', 'reminder', 'finance']
+      .filter(m => byMod[m])
+      .map(m => {
+        const r = byMod[m];
+        const pct = r.total ? Math.round(r.done / r.total * 100) : 0;
+        return `<div class="flex-between mb-8">
+          <span class="text-sm">${TaskAgg.MODULE_LABELS[m]}</span>
+          <span class="text-sm text-light">${r.done}/${r.total} · <span class="text-bold" style="color:${pct >= 80 ? '#2e7d32' : pct >= 50 ? '#f9a825' : '#c62828'}">${pct}%</span></span>
+        </div>
+        <div class="progress-bar mb-12"><div class="progress-fill" style="width:${pct}%;background:${pct >= 80 ? '#829E8E' : pct >= 50 ? '#FFB74D' : '#e57373'}"></div></div>`;
+      }).join('');
+
+    // 未完成总结（高优先级置顶）
+    const incomplete = TaskAgg.sortItems(stats.items.filter(i => !i.done));
+    // 次日预告
+    const nextStats = TaskAgg.dayStats(tomorrow);
+    const nextItems = TaskAgg.sortItems(nextStats.items).slice(0, 8);
+
+    c.innerHTML = `
+      <div class="flex-between mb-12">
+        <div class="section-title" style="margin:0;">📈 ${I18n.t('dayReview')} · ${today}</div>
+        <button class="btn btn-outline btn-sm" onclick="App.navigate('home')">← ${I18n.t('back')}</button>
+      </div>
+
+      <div class="card">
+        <div class="card-title">🎯 ${I18n.t('completionRate')} ${stats.rate}%</div>
+        <div class="flex-around mb-12">
+          <div class="text-center"><div class="text-bold" style="font-size:22px;">${stats.total}</div><div class="text-sm text-light">${I18n.t('todoTotal')}</div></div>
+          <div class="text-center"><div class="text-bold" style="font-size:22px;color:#2e7d32;">${stats.done}</div><div class="text-sm text-light">${I18n.t('completed')}</div></div>
+          <div class="text-center"><div class="text-bold" style="font-size:22px;color:#c62828;">${stats.incomplete}</div><div class="text-sm text-light">${I18n.t('incomplete')}</div></div>
+        </div>
+        <div class="divider"></div>
+        ${modRows || '<div class="text-light text-sm">暂无数据</div>'}
+      </div>
+
+      <div class="card">
+        <div class="card-title">⚠️ ${I18n.t('unfinishedSummary')}（${incomplete.length}）</div>
+        ${incomplete.length ? incomplete.slice(0, 12).map(i => this._renderAggItem(i)).join('') : `<div class="text-light text-sm">🎉 ${I18n.t('allDone')}</div>`}
+      </div>
+
+      <div class="card">
+        <div class="card-title">🔭 ${I18n.t('nextDayPreview')} · ${tomorrow}</div>
+        ${nextItems.length ? nextItems.map(i => this._renderAggItem(i)).join('') : `<div class="text-light text-sm">${I18n.t('noData')}</div>`}
       </div>
     `;
   },
