@@ -26,6 +26,10 @@ const App = {
     // 初始化云同步
     Cloud.init();
     Cloud.updateSyncIndicator();
+    // 注册 Service Worker（PWA 离线缓存 + 资源加速）
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('sw.js').catch(() => {});
+    }
   },
 
   /* 清理超过7天的收件箱消息 */
