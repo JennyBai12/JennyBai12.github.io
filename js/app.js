@@ -35,14 +35,15 @@ const App = {
   /* 清理超过7天的收件箱消息 */
   cleanExpiredInbox() {
     const today = Utils.today();
-    let removed = 0;
-    Store.get('inbox').forEach(i => {
-      if (i.date) {
-        const age = Utils.daysBetween(i.date.slice(0, 10), today);
-        if (age > 7) { Store.remove('inbox', i.id); removed++; }
-      }
+    const inbox = Store.get('inbox');
+    const filtered = inbox.filter(i => {
+      if (!i.date) return true; // 无日期的保留
+      const age = Utils.daysBetween(i.date.slice(0, 10), today);
+      return age <= 7; // 7天以内保留
     });
-    if (removed > 0) Store.save();
+    if (filtered.length !== inbox.length) {
+      Store.save('inbox', filtered);
+    }
   },
 
   /* ===== 导航 ===== */
@@ -66,6 +67,15 @@ const App = {
   navigate(module, sub) {
     this.currentModule = module;
     this.currentSubModule = sub || null;
+    // 更新导航高亮（无论是否有 sub）
+    document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
+    document.querySelectorAll('.bn-item').forEach(el => el.classList.remove('active'));
+    const navEl = document.getElementById(`nav-${module}`);
+    const bnEl = document.getElementById(`bn-${module}`);
+    if (navEl) navEl.classList.add('active');
+    if (bnEl) bnEl.classList.add('active');
+    document.getElementById('page-title').textContent = I18n.t(module === 'home' ? 'home' : module);
+    document.getElementById('sidebar').classList.remove('open');
     // 子模块跳转：如果目标模块有 setSub 方法，切换到对应子标签
     if (sub) {
       const modMap = { study: 'StudyMod', health: 'HealthMod', work: 'WorkMod', goods: 'GoodsMod' };
@@ -75,14 +85,6 @@ const App = {
         return; // setSub 内部会触发 App.render()
       }
     }
-    document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
-    document.querySelectorAll('.bn-item').forEach(el => el.classList.remove('active'));
-    const navEl = document.getElementById(`nav-${module}`);
-    const bnEl = document.getElementById(`bn-${module}`);
-    if (navEl) navEl.classList.add('active');
-    if (bnEl) bnEl.classList.add('active');
-    document.getElementById('page-title').textContent = I18n.t(module === 'home' ? 'home' : module);
-    document.getElementById('sidebar').classList.remove('open');
     this.render();
   },
 
@@ -485,15 +487,18 @@ const App = {
   },
 
   inboxMarkAllRead() {
-    Store.get('inbox').forEach(i => { if (!i.read) Store.update('inbox', i.id, { read: true }); });
+    const inbox = Store.get('inbox');
+    let changed = false;
+    inbox.forEach(i => { if (!i.read) { i.read = true; changed = true; } });
+    if (changed) Store.save('inbox', inbox);
     this.renderInboxDetail();
     this.showToast('已全部标记为已读', 'success');
   },
 
   inboxClearAll() {
     this.confirm('确认清空收件箱？所有消息将被删除，不可恢复。', () => {
-      Store.get('inbox').forEach(i => Store.remove('inbox', i.id));
-      this._inboxNotifiedKey = null; // 重置以便下次重新生成
+      Store.save('inbox', []);
+      // 不重置 _inboxNotifiedKey，避免 refreshNotifications 立即重新生成自动通知
       this.renderInboxDetail();
       this.showToast('收件箱已清空', 'success');
     }, '清空收件箱');
@@ -523,14 +528,21 @@ const App = {
     if (this._inboxNotifiedKey === dayKey) return;
     this._inboxNotifiedKey = dayKey;
 
-    // 清除旧的自动生成通知（保留手动添加的）
-    Store.get('inbox').filter(i => i.auto).forEach(i => Store.remove('inbox', i.id));
-
-    // 清理超过7天的历史消息
-    this.cleanExpiredInbox();
+    // 批量操作：先收集所有要生成的通知，最后一次性写入
+    const inbox = Store.get('inbox');
+    // 保留手动添加的（非auto）且未过期的，清除旧的自动通知
+    const kept = inbox.filter(i => {
+      if (i.auto) return false; // 清除旧自动通知，后面重新生成
+      if (i.date) {
+        const age = Utils.daysBetween(i.date.slice(0, 10), today);
+        if (age > 7) return false; // 清理过期
+      }
+      return true;
+    });
+    const newItems = [];
 
     const add = (type, source, title, content, actionModule, actionSub, actionId) => {
-      Store.add('inbox', { type, source, title, content, date: now, read: false, actionModule: actionModule || '', actionSub: actionSub || '', actionId: actionId || 0, auto: true });
+      newItems.push({ type, source, title, content, date: now, read: false, actionModule: actionModule || '', actionSub: actionSub || '', actionId: actionId || 0, auto: true });
     };
 
     // 1. 工作模块 — 待办截止/逾期/高优先级
@@ -607,6 +619,14 @@ const App = {
     // 6. 系统通知
     if (Cloud.lastSyncAt) add('系统通知', 'system', '☁️ 云端同步完成', `数据已于 ${Cloud.lastSyncAt.slice(0, 16).replace('T', ' ')} 同步至云端。`, '', '', 0);
     add('系统通知', 'system', '📱 版本更新', '白白的日记已更新至最新版本，享受更稳定的服务。', '', '', 0);
+
+    // 一次性写入：合并保留的手动通知 + 新生成的自动通知
+    if (newItems.length > 0 || kept.length !== inbox.length) {
+      // 给新通知分配 ID
+      let maxId = kept.length > 0 ? Math.max(...kept.map(i => i.id || 0)) : 0;
+      newItems.forEach(item => { maxId++; item.id = maxId; });
+      Store.save('inbox', [...kept, ...newItems]);
+    }
   },
 
   /* ===== 快速记录（直连业务模块） ===== */
@@ -809,10 +829,9 @@ const App = {
     }
   },
 
-  /* ===== 全局备份/导出 ===== */
+  /* ===== 全局备份/导出（exportBackup 的别名，保持向后兼容） ===== */
   exportBackup() {
-    Utils.downloadJSON('baibai_backup_' + Utils.today() + '.json', Store.exportAll());
-    this.showToast('备份已下载', 'success');
+    this.exportData();
   },
 
   exportModuleCSV(module, columns, filename) {

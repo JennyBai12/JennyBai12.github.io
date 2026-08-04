@@ -199,12 +199,12 @@ const Utils = {
       },
     };
 
-    // 本地有 worker + tessdata 时用本地路径；core wasm 从国内 npm 镜像加载（体积大不打包）
+    // 本地有 worker + core + tessdata 时全用本地路径，完全离线可用
     const loadedFrom = Utils._ocrLoadedFrom || '';
     if (loadedFrom.includes('vendor/tesseract/')) {
       opts.workerPath = base + '/worker.min.js';
       opts.langPath = base + '/tessdata';
-      opts.corePath = 'https://registry.npmmirror.com/tesseract.js-core/4.0.1/files/';
+      opts.corePath = base + '/';  // 本地已有 tesseract-core.wasm.js
     }
 
     let worker = null;
@@ -314,8 +314,7 @@ const Utils = {
       const d = body.match(/(\d{4})[-\/](\d{1,2})[-\/](\d{1,2})/) || body.match(/(\d{1,2})月(\d{1,2})[日号]?/) || body.match(/(\d{1,2})[-\/](\d{1,2})日?/);
       if (d) {
         if (d[3]) deadline = `${d[1]}-${String(d[2]).padStart(2, '0')}-${String(d[3]).padStart(2, '0')}`;
-        else if (d[2]) deadline = `2026-${String(d[1]).padStart(2, '0')}-${String(d[2]).padStart(2, '0')}`;
-        else if (d[4]) deadline = Utils.today().slice(0, 5) + String(d[4]).padStart(2, '0') + '-' + String(d[5]).padStart(2, '0');
+        else if (d[2]) deadline = `${new Date().getFullYear()}-${String(d[1]).padStart(2, '0')}-${String(d[2]).padStart(2, '0')}`;
       }
       let priority = '中';
       if (/紧急|立即|尽快|马上|务必/.test(body)) priority = '高';
@@ -480,12 +479,11 @@ const Utils = {
     } catch (e) { return false; }
   },
 
-  /* 农历转公历简化（模拟） */
+  /* 农历转公历（简化版：农历日期大约比公历晚一个月左右，这里返回原始日期作为近似值）
+   * 注意：这是简化实现，不进行真正的农历计算。如需精确转换请引入农历库。 */
   lunarToSolar(lunarDate) {
     if (!lunarDate) return '';
-    const d = new Date(lunarDate);
-    d.setDate(d.getDate() + Math.floor(Math.random() * 30));
-    return this.formatDate(d);
+    return this.formatDate(lunarDate);
   },
 
   /* 货币格式化 */

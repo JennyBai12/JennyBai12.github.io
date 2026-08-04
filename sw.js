@@ -1,6 +1,6 @@
 // PWA Service Worker - 离线缓存
-const CACHE = 'diary-v19';
-const ASSETS = ['/', '/index.html', '/css/style.css', '/js/i18n.js', '/js/store.js', '/js/cloud.js', '/js/charts.js', '/js/utils.js', '/js/app.js', '/js/mod-habits.js', '/js/mod-study.js', '/js/mod-health.js', '/js/mod-work.js', '/js/mod-news.js', '/js/mod-diary.js', '/js/mod-wardrobe.js', '/js/mod-goods.js', '/js/mod-savings.js', '/js/mod-reminders.js'];
+const CACHE = 'diary-v20';
+const ASSETS = ['/', '/index.html', '/css/style.css', '/manifest.json', '/js/i18n.js', '/js/store.js', '/js/cloud.js', '/js/charts.js', '/js/utils.js', '/js/app.js', '/js/mod-habits.js', '/js/mod-study.js', '/js/mod-health.js', '/js/mod-work.js', '/js/mod-news.js', '/js/mod-diary.js', '/js/mod-wardrobe.js', '/js/mod-goods.js', '/js/mod-savings.js', '/js/mod-reminders.js'];
 
 self.addEventListener('install', (e) => {
   e.waitUntil(caches.open(CACHE).then((c) => c.addAll(ASSETS)).catch(() => {}));
