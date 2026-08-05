@@ -3,6 +3,10 @@ const MOVIE_GENRES = ['科幻', '悬疑', '喜剧', '爱情', '动作', '剧情'
 
 const StudyMod = {
   subTab: 'records',
+  /* 学习记录 / 阅读管理 的日期与时间段搜索状态 */
+  recordsFrom: '', recordsTo: '', recordsQuick: 'all', recordsText: '',
+  bookFrom: '', bookTo: '', bookQuick: 'all', bookStatusFilter: 'all',
+  _bookBase: [],
 
   render(c) {
     c.innerHTML = `
@@ -23,30 +27,85 @@ const StudyMod = {
 
   setSub(tab) { this.subTab = tab; App.render(); },
 
-  /* ===== 学习记录 ===== */
+  /* ===== 学习记录（含日期 / 时间段搜索） ===== */
   renderRecords() {
-    const records = Store.get('study_records').sort((a, b) => b.date.localeCompare(a.date));
+    const records = this._filterRecords(Store.get('study_records'))
+      .sort((a, b) => b.date.localeCompare(a.date));
     const last7 = Utils.last7Days();
     const chartData = last7.map(d => {
       const total = Store.filter('study_records', r => r.date === d).reduce((s, r) => s + r.duration, 0);
       return { label: d.slice(5), value: total };
     });
+    const hasFilter = this.recordsFrom || this.recordsTo || this.recordsText;
+
     document.getElementById('study-sub').innerHTML = `
       <div class="flex-between mb-12">
         <div class="subsection-title" style="margin:0;">学习记录</div>
         <button class="btn btn-primary btn-sm" onclick="StudyMod.addRecord()">+ 新增</button>
       </div>
       <div class="chart-box"><div class="chart-title">近7天学习时长（分钟）</div>${Charts.line(chartData)}</div>
-      ${records.map(r => `
-        <div class="list-item">
-          <div class="list-icon">📖</div>
-          <div class="list-body"><div class="list-title">${Utils.escape(r.content)}</div><div class="list-meta">${r.type} · ${r.duration}分钟 · ${r.date}${r.note ? ' · ' + Utils.escape(r.note) : ''}</div></div>
-          <span class="list-action" onclick="StudyMod.delRecord(${r.id})">✕</span>
+
+      <div class="filter-bar">
+        <div class="filter-tab ${this.recordsQuick==='all'?'active':''}" onclick="StudyMod.setRecordsQuick('all')">全部</div>
+        <div class="filter-tab ${this.recordsQuick==='7'?'active':''}" onclick="StudyMod.setRecordsQuick('7')">近7天</div>
+        <div class="filter-tab ${this.recordsQuick==='30'?'active':''}" onclick="StudyMod.setRecordsQuick('30')">近30天</div>
+        <div class="filter-tab ${this.recordsQuick==='year'?'active':''}" onclick="StudyMod.setRecordsQuick('year')">今年</div>
+      </div>
+      <div class="search-bar">
+        <input type="text" class="search-input" placeholder="搜索内容 / 类型..." value="${Utils.escape(this.recordsText)}" oninput="StudyMod.onRecordsText(this.value)">
+        <div class="date-range">
+          <input type="date" class="date-input" value="${this.recordsFrom}" onchange="StudyMod.setRecordsFrom(this.value)" title="开始日期">
+          <span class="date-sep">~</span>
+          <input type="date" class="date-input" value="${this.recordsTo}" onchange="StudyMod.setRecordsTo(this.value)" title="结束日期">
         </div>
-      `).join('')}
-      ${records.length === 0 ? '<div class="empty-state"><div class="empty-icon">📚</div>暂无学习记录</div>' : ''}
+      </div>
+      ${hasFilter ? `<div class="filter-tip">已筛选 ${records.length} 条${this.recordsFrom?' · 起 '+this.recordsFrom:''}${this.recordsTo?' · 止 '+this.recordsTo:''}${this.recordsText?' · 含「'+Utils.escape(this.recordsText)+'」':''} <span class="link-reset" onclick="StudyMod.resetRecordsFilter()">清除</span></div>` : ''}
+
+      <div id="records-list">
+        ${this.renderRecordsList(records)}
+      </div>
     `;
   },
+
+  _filterRecords(list) {
+    const q = (this.recordsText || '').trim().toLowerCase();
+    return list.filter(r => {
+      if (q && !((r.content||'').toLowerCase().includes(q) || (r.type||'').toLowerCase().includes(q) || (r.note||'').toLowerCase().includes(q))) return false;
+      if (this.recordsFrom && (r.date||'') < this.recordsFrom) return false;
+      if (this.recordsTo && (r.date||'') > this.recordsTo) return false;
+      return true;
+    });
+  },
+
+  onRecordsText(v) {
+    this.recordsText = v; this.recordsQuick = '';
+    const el = document.getElementById('records-list');
+    if (el) el.innerHTML = this.renderRecordsList(this._filterRecords(Store.get('study_records')).sort((a, b) => b.date.localeCompare(a.date)));
+  },
+
+  renderRecordsList(records) {
+    if (!records.length) return '<div class="empty-state"><div class="empty-icon">📚</div>暂无学习记录</div>';
+    return records.map(r => `
+      <div class="list-item">
+        <div class="list-icon">📖</div>
+        <div class="list-body"><div class="list-title">${Utils.escape(r.content)}</div><div class="list-meta">${r.type} · ${r.duration}分钟 · ${r.date}${r.note ? ' · ' + Utils.escape(r.note) : ''}</div></div>
+        <span class="list-action" onclick="StudyMod.delRecord(${r.id})">✕</span>
+      </div>
+    `).join('');
+  },
+
+  setRecordsQuick(q) {
+    this.recordsQuick = q; this.recordsText = '';
+    if (q === 'all') { this.recordsFrom = ''; this.recordsTo = ''; }
+    else if (q === '7') { this.recordsFrom = Utils.addDays(Utils.today(), -6); this.recordsTo = Utils.today(); }
+    else if (q === '30') { this.recordsFrom = Utils.addDays(Utils.today(), -29); this.recordsTo = Utils.today(); }
+    else if (q === 'year') { this.recordsFrom = Utils.yearStart(); this.recordsTo = ''; }
+    App.render();
+  },
+  setRecordsFrom(v) { this.recordsFrom = v; this.recordsQuick = ''; App.render(); },
+  setRecordsTo(v) { this.recordsTo = v; this.recordsQuick = ''; App.render(); },
+  resetRecordsFilter() { this.recordsText = ''; this.recordsFrom = ''; this.recordsTo = ''; this.recordsQuick = 'all'; App.render(); },
+
 
   addRecord() {
     App.openModal(`
@@ -78,7 +137,10 @@ const StudyMod = {
 
   /* ===== 阅读管理 ===== */
   renderReading() {
-    const books = Store.get('books');
+    let books = Store.get('books');
+    if (this.bookFrom) books = books.filter(b => (b.startDate||'') && (b.startDate||'') >= this.bookFrom);
+    if (this.bookTo) books = books.filter(b => (b.startDate||'') && (b.startDate||'') <= this.bookTo);
+    this._bookBase = books;
     const plan = Store.get('annual_reading_plans').find(p => p.year === new Date().getFullYear());
     const finished = books.filter(b => b.status === '已读完').length;
     const reading = books.filter(b => b.status === '在读').length;
@@ -107,11 +169,26 @@ const StudyMod = {
       </div>
 
       <div class="filter-bar">
-        <div class="filter-tab active" onclick="StudyMod.filterBooks('all')">全部</div>
-        <div class="filter-tab" onclick="StudyMod.filterBooks('待阅读')">待阅读</div>
-        <div class="filter-tab" onclick="StudyMod.filterBooks('在读')">在读</div>
-        <div class="filter-tab" onclick="StudyMod.filterBooks('已读完')">已读完</div>
-        <div class="filter-tab" onclick="StudyMod.filterBooks('弃读')">弃读</div>
+        <div class="filter-tab ${this.bookQuick==='all'?'active':''}" onclick="StudyMod.setBookQuick('all')">全部时间</div>
+        <div class="filter-tab ${this.bookQuick==='7'?'active':''}" onclick="StudyMod.setBookQuick('7')">近7天</div>
+        <div class="filter-tab ${this.bookQuick==='30'?'active':''}" onclick="StudyMod.setBookQuick('30')">近30天</div>
+        <div class="filter-tab ${this.bookQuick==='year'?'active':''}" onclick="StudyMod.setBookQuick('year')">今年</div>
+      </div>
+      <div class="search-bar mb-12">
+        <div class="date-range">
+          <input type="date" class="date-input" value="${this.bookFrom}" onchange="StudyMod.setBookFrom(this.value)" title="开始日期">
+          <span class="date-sep">~</span>
+          <input type="date" class="date-input" value="${this.bookTo}" onchange="StudyMod.setBookTo(this.value)" title="结束日期">
+        </div>
+        ${(this.bookFrom||this.bookTo) ? `<span class="link-reset" onclick="StudyMod.resetBookFilter()">清除</span>` : ''}
+      </div>
+
+      <div class="filter-bar" id="book-status-bar">
+        <div class="filter-tab ${this.bookStatusFilter==='all'?'active':''}" onclick="StudyMod.filterBooks('all')">全部</div>
+        <div class="filter-tab ${this.bookStatusFilter==='待阅读'?'active':''}" onclick="StudyMod.filterBooks('待阅读')">待阅读</div>
+        <div class="filter-tab ${this.bookStatusFilter==='在读'?'active':''}" onclick="StudyMod.filterBooks('在读')">在读</div>
+        <div class="filter-tab ${this.bookStatusFilter==='已读完'?'active':''}" onclick="StudyMod.filterBooks('已读完')">已读完</div>
+        <div class="filter-tab ${this.bookStatusFilter==='弃读'?'active':''}" onclick="StudyMod.filterBooks('弃读')">弃读</div>
       </div>
 
       <div id="book-list">${this.renderBookList(books)}</div>
@@ -145,11 +222,27 @@ const StudyMod = {
   },
 
   filterBooks(status) {
-    const books = status === 'all' ? Store.get('books') : Store.filter('books', b => b.status === status);
+    this.bookStatusFilter = status;
+    const base = this._bookBase || Store.get('books');
+    const books = status === 'all' ? base : base.filter(b => b.status === status);
     document.getElementById('book-list').innerHTML = this.renderBookList(books);
-    document.querySelectorAll('.filter-tab').forEach(t => t.classList.remove('active'));
-    event.target.classList.add('active');
+    document.querySelectorAll('#book-status-bar .filter-tab').forEach(t => {
+      const label = t.textContent.trim();
+      if ((status === 'all' && label === '全部') || label === status) t.classList.add('active');
+      else t.classList.remove('active');
+    });
   },
+
+  setBookQuick(q) {
+    this.bookQuick = q; this.bookFrom = ''; this.bookTo = '';
+    if (q === '7') { this.bookFrom = Utils.addDays(Utils.today(), -6); this.bookTo = Utils.today(); }
+    else if (q === '30') { this.bookFrom = Utils.addDays(Utils.today(), -29); this.bookTo = Utils.today(); }
+    else if (q === 'year') { this.bookFrom = Utils.yearStart(); this.bookTo = ''; }
+    App.render();
+  },
+  setBookFrom(v) { this.bookFrom = v; this.bookQuick = ''; App.render(); },
+  setBookTo(v) { this.bookTo = v; this.bookQuick = ''; App.render(); },
+  resetBookFilter() { this.bookFrom = ''; this.bookTo = ''; this.bookQuick = 'all'; this.bookStatusFilter = 'all'; App.render(); },
 
   bookDetail(id) {
     const book = Store.find('books', b => b.id === id);
@@ -568,6 +661,7 @@ const StudyMod = {
         </div>
         <div class="flex gap-8">
           <button class="btn btn-outline btn-sm" onclick="StudyMod.mediaDetail(${m.id})">详情</button>
+          <button class="btn btn-outline btn-sm" onclick="StudyMod.editMedia(${m.id})">编辑</button>
           <button class="btn btn-cancel btn-sm" onclick="StudyMod.delMedia(${m.id})">✕</button>
         </div>
       </div>
@@ -577,10 +671,25 @@ const StudyMod = {
 
   setMediaFilter(f) { this.mediaFilter = f; App.render(); },
 
-  addMedia() {
-    this._mediaImages = [];
+  addMedia() { this._openMediaForm(null); },
+
+  editMedia(id) {
+    const m = Store.find('media', x => x.id === id);
+    if (!m) return;
+    this._openMediaForm(m);
+  },
+
+  _openMediaForm(m) {
+    const isEdit = !!m;
+    this._mediaImages = isEdit ? (m.images || []).slice() : [];
+    const excerptNote = isEdit ? (Store.filter('media_notes', n => n.mediaId === m.id && n.noteType === '摘抄')[0] || {}) : {};
+    const noteNote = isEdit ? (Store.filter('media_notes', n => n.mediaId === m.id && n.noteType === '笔记')[0] || {}) : {};
+    const v = (val) => (val == null ? '' : val);
+    const dv = (val, def) => (val == null ? (def == null ? 0 : def) : val);
+    const sel = (val, opt) => (val === opt ? ' selected' : '');
+    const ratingOpts = [0,1,2,3,4,5].map(n => `<option value="${n}"${(m && m.rating === n) ? ' selected' : ''}>${n === 0 ? '未评' : '⭐'.repeat(n)}</option>`).join('');
     App.openModal(`
-      <div class="modal-title">🎬 添加影音记录</div>
+      <div class="modal-title">${isEdit ? '✏️ 编辑影音记录' : '🎬 添加影音记录'}</div>
 
       <div class="form-group ocr-block">
         <label class="form-label">📷 拍照识别 <span class="text-light" style="font-weight:400;">票根 / 海报 / 播放页截图</span></label>
@@ -593,41 +702,49 @@ const StudyMod = {
         <div id="md-imgs"></div>
       </div>
 
-      <div class="form-group"><label class="form-label">作品名称 <span class="req">*</span></label><input type="text" id="md-title"></div>
+      <div class="form-group"><label class="form-label">作品名称 <span class="req">*</span></label><input type="text" id="md-title" value="${Utils.escape(v(m && m.title))}"></div>
       <div class="two-col">
         <div class="form-group"><label class="form-label">品类</label><select id="md-category" onchange="StudyMod.toggleMediaFields()">
-          <option>电影</option><option>电视剧</option><option>纪录片</option><option>综艺</option>
+          <option${sel(m && m.category, '电影')}>电影</option><option${sel(m && m.category, '电视剧')}>电视剧</option><option${sel(m && m.category, '纪录片')}>纪录片</option><option${sel(m && m.category, '综艺')}>综艺</option>
         </select></div>
         <div class="form-group"><label class="form-label">状态</label><select id="md-status">
-          <option>想看</option><option>追更中</option><option>已看完</option><option>搁置弃看</option>
+          <option${sel(m && m.status, '想看')}>想看</option><option${sel(m && m.status, '追更中')}>追更中</option><option${sel(m && m.status, '已看完')}>已看完</option><option${sel(m && m.status, '搁置弃看')}>搁置弃看</option>
         </select></div>
       </div>
       <div class="form-group"><label class="form-label">题材标签</label>
         <div class="tag-presets" id="md-tag-presets"></div>
-        ${App.suggestInput({ id: 'md-tags', placeholder: '点击上方选项或自行输入，可多选', className: '' })}
+        ${App.suggestInput({ id: 'md-tags', value: v(m && m.tags), placeholder: '点击上方选项或自行输入，可多选', className: '' })}
       </div>
       <div class="two-col">
-        <div class="form-group"><label class="form-label">观看起始日期</label><input type="date" id="md-start" value="${Utils.today()}"></div>
-        <div class="form-group"><label class="form-label">完结日期</label><input type="date" id="md-end"></div>
+        <div class="form-group"><label class="form-label">观看起始日期</label><input type="date" id="md-start" value="${v(m && m.startDate) || Utils.today()}"></div>
+        <div class="form-group"><label class="form-label">完结日期</label><input type="date" id="md-end" value="${v(m && m.endDate)}"></div>
+      </div>
+      <div id="md-cost-field">
+        <div class="form-group"><label class="form-label">观影花销</label><input type="number" id="md-cost" value="${dv(m && m.cost)}"></div>
       </div>
       <div class="two-col">
-        <div class="form-group"><label class="form-label">观影花销</label><input type="number" id="md-cost" value="0"></div>
-        <div class="form-group"><label class="form-label">星级评分</label><select id="md-rating"><option value="0">未评</option><option value="1">⭐</option><option value="2">⭐⭐</option><option value="3">⭐⭐⭐</option><option value="4">⭐⭐⭐⭐</option><option value="5">⭐⭐⭐⭐⭐</option></select></div>
+        <div class="form-group"><label class="form-label">星级评分</label><select id="md-rating">${ratingOpts}</select></div>
+        <div class="form-group"><label class="form-label">进度（%）</label><input type="number" id="md-progress" value="${dv(m && m.progress)}" min="0" max="100"></div>
       </div>
-      <div class="form-group"><label class="form-label">进度（%）</label><input type="number" id="md-progress" value="0" min="0" max="100"></div>
+
+      <!-- 内联摘抄 / 笔记：填表时即可一并记录 -->
+      <div class="divider"></div>
+      <div class="text-sm text-bold mb-8">📝 摘抄 / 笔记</div>
+      <div class="form-group"><label class="form-label">📝 摘抄</label><textarea id="md-excerpt" rows="3" placeholder="观影时记下的台词、金句...">${Utils.escape(v(excerptNote.text || excerptNote.content))}</textarea></div>
+      <div class="form-group"><label class="form-label">📝 笔记</label><textarea id="md-note" rows="3" placeholder="观后感、想法...">${Utils.escape(v(noteNote.text || noteNote.content))}</textarea></div>
 
       <!-- 电影专属 -->
       <div id="md-film-fields">
         <div class="divider"></div>
         <div class="text-sm text-bold mb-8">🎬 电影专属</div>
-        <div class="form-group"><label class="form-label">观看渠道</label><select id="md-channel"><option>影院观影</option><option>线上观看</option></select></div>
+        <div class="form-group"><label class="form-label">观看渠道</label><select id="md-channel"><option${sel(m && m.channel, '影院观影')}>影院观影</option><option${sel(m && m.channel, '线上观看')}>线上观看</option></select></div>
         <div class="two-col">
-          <div class="form-group"><label class="form-label">影院 <span class="text-light" style="font-weight:400;">🧠 已自动记忆</span></label>${App.suggestInput({ id: 'md-cinema', placeholder: '输入模糊字段即联想，如 万达', className: '' })}</div>
-          <div class="form-group"><label class="form-label">场次时间</label><input type="text" id="md-showtime" placeholder="如：19:30"></div>
+          <div class="form-group"><label class="form-label">影院 <span class="text-light" style="font-weight:400;">🧠 已自动记忆</span></label>${App.suggestInput({ id: 'md-cinema', value: v(m && m.cinema), placeholder: '输入模糊字段即联想，如 万达', className: '' })}</div>
+          <div class="form-group"><label class="form-label">场次时间</label><input type="text" id="md-showtime" placeholder="如：19:30" value="${Utils.escape(v(m && m.showTime))}"></div>
         </div>
         <div class="two-col">
-          <div class="form-group"><label class="form-label">票价</label><input type="number" id="md-ticket" value="0"></div>
-          <div class="form-group"><label class="form-label">同行人员</label>${App.suggestInput({ id: 'md-companions', placeholder: '如：朋友', className: '' })}</div>
+          <div class="form-group"><label class="form-label">票价</label><input type="number" id="md-ticket" value="${dv(m && m.ticketPrice)}"></div>
+          <div class="form-group"><label class="form-label">同行人员</label>${App.suggestInput({ id: 'md-companions', value: v(m && m.companions), placeholder: '如：朋友', className: '' })}</div>
         </div>
       </div>
 
@@ -636,29 +753,29 @@ const StudyMod = {
         <div class="divider"></div>
         <div class="text-sm text-bold mb-8">📺 电视剧/综艺专属</div>
         <div class="two-col">
-          <div class="form-group"><label class="form-label">总集数</label><input type="number" id="md-total-ep" value="0"></div>
-          <div class="form-group"><label class="form-label">当前集数</label><input type="number" id="md-cur-ep" value="0"></div>
+          <div class="form-group"><label class="form-label">总集数</label><input type="number" id="md-total-ep" value="${dv(m && m.totalEpisodes)}"></div>
+          <div class="form-group"><label class="form-label">当前集数</label><input type="number" id="md-cur-ep" value="${dv(m && m.currentEpisode)}"></div>
         </div>
-        <div class="form-group"><label class="form-label">追剧随笔</label><textarea id="md-drama-notes" rows="2"></textarea></div>
+        <div class="form-group"><label class="form-label">追剧随笔</label><textarea id="md-drama-notes" rows="2">${Utils.escape(v(m && m.dramaNotes))}</textarea></div>
       </div>
 
       <!-- 纪录片专属 -->
       <div id="md-doc-fields" style="display:none;">
         <div class="divider"></div>
         <div class="text-sm text-bold mb-8">🌏 纪录片专属</div>
-        <div class="form-group"><label class="form-label">主题分类</label><input type="text" id="md-doc-topic" placeholder="如：海洋生态"></div>
-        <div class="form-group"><label class="form-label">知识点摘抄</label><textarea id="md-doc-knowledge" rows="3"></textarea></div>
-        <div class="form-group"><label class="form-label">学习心得</label><textarea id="md-doc-reflection" rows="2"></textarea></div>
-        <div class="form-group"><label class="form-label"><input type="checkbox" id="md-add-study"> 纳入学习计划</label></div>
+        <div class="form-group"><label class="form-label">主题分类</label><input type="text" id="md-doc-topic" placeholder="如：海洋生态" value="${Utils.escape(v(m && m.docTopic))}"></div>
+        <div class="form-group"><label class="form-label">知识点摘抄</label><textarea id="md-doc-knowledge" rows="3">${Utils.escape(v(m && m.docKnowledge))}</textarea></div>
+        <div class="form-group"><label class="form-label">学习心得</label><textarea id="md-doc-reflection" rows="2">${Utils.escape(v(m && m.docReflection))}</textarea></div>
+        <div class="form-group"><label class="form-label"><input type="checkbox" id="md-add-study"${m && m.addToStudy ? ' checked' : ''}> 纳入学习计划</label></div>
       </div>
 
       <!-- 弃看原因 -->
       <div id="md-abandon-fields" style="display:none;">
         <div class="divider"></div>
-        <div class="form-group"><label class="form-label">搁置/弃看原因</label><textarea id="md-abandon" rows="2"></textarea></div>
+        <div class="form-group"><label class="form-label">搁置/弃看原因</label><textarea id="md-abandon" rows="2">${Utils.escape(v(m && m.abandonReason))}</textarea></div>
       </div>
 
-      <div class="modal-actions"><button class="btn-cancel" onclick="App.closeModal()">${I18n.t('cancel')}</button><button class="btn-confirm" onclick="StudyMod.saveMedia()">${I18n.t('save')}</button></div>
+      <div class="modal-actions"><button class="btn-cancel" onclick="App.closeModal()">${I18n.t('cancel')}</button><button class="btn-confirm" onclick="StudyMod.saveMedia(${isEdit ? m.id : 'null'})">${I18n.t('save')}</button></div>
     `);
     this.toggleMediaFields();
     this.bindMediaSuggest();
@@ -674,6 +791,8 @@ const StudyMod = {
         cost: document.getElementById('md-cost')?.value || '0',
         rating: document.getElementById('md-rating')?.value || '0',
         progress: document.getElementById('md-progress')?.value || '0',
+        excerpt: document.getElementById('md-excerpt')?.value || '',
+        note: document.getElementById('md-note')?.value || '',
         channel: document.getElementById('md-channel')?.value || '',
         cinema: document.getElementById('md-cinema')?.value || '',
         showtime: document.getElementById('md-showtime')?.value || '',
@@ -700,6 +819,8 @@ const StudyMod = {
         if (d.cost != null) g('md-cost').value = d.cost;
         if (d.rating != null) g('md-rating').value = d.rating;
         if (d.progress != null) g('md-progress').value = d.progress;
+        if (d.excerpt != null) g('md-excerpt').value = d.excerpt;
+        if (d.note != null) g('md-note').value = d.note;
         if (d.channel != null) g('md-channel').value = d.channel;
         if (d.cinema != null) g('md-cinema').value = d.cinema;
         if (d.showtime != null) g('md-showtime').value = d.showtime;
@@ -720,7 +841,7 @@ const StudyMod = {
         this._syncPresetActive();
         this.bindMediaSuggest();
       },
-      () => StudyMod.addMedia()
+      () => m ? StudyMod.editMedia(m.id) : StudyMod.addMedia()
     );
   },
 
@@ -894,19 +1015,25 @@ ${Utils.escape(text)}</div>`;
     document.getElementById('md-drama-fields').style.display = (cat === '电视剧' || cat === '综艺') ? '' : 'none';
     document.getElementById('md-doc-fields').style.display = cat === '纪录片' ? '' : 'none';
     document.getElementById('md-abandon-fields').style.display = status === '搁置弃看' ? '' : 'none';
+    /* 电影：总花销只记录票价，隐藏通用「观影花销」字段 */
+    const costField = document.getElementById('md-cost-field');
+    if (costField) costField.style.display = cat === '电影' ? 'none' : '';
   },
 
-  saveMedia() {
+  saveMedia(editId) {
     const title = document.getElementById('md-title').value.trim();
     if (!title) { App.showToast(I18n.t('fillRequired'), 'error'); return; }
     const category = document.getElementById('md-category').value;
     const status = document.getElementById('md-status').value;
+    const ticket = +document.getElementById('md-ticket').value || 0;
+    /* 电影：总花销只记录票价；其他品类才用通用「观影花销」字段 */
+    const cost = category === '电影' ? ticket : (+document.getElementById('md-cost').value || 0);
     const data = {
       title, category,
       tags: document.getElementById('md-tags').value,
       startDate: document.getElementById('md-start').value,
       endDate: document.getElementById('md-end').value,
-      cost: +document.getElementById('md-cost').value || 0,
+      cost,
       rating: +document.getElementById('md-rating').value || 0,
       progress: +document.getElementById('md-progress').value || 0,
       status, images: (this._mediaImages || []).slice(), abandonReason: '',
@@ -918,7 +1045,7 @@ ${Utils.escape(text)}</div>`;
       data.channel = document.getElementById('md-channel').value;
       data.cinema = document.getElementById('md-cinema').value;
       data.showTime = document.getElementById('md-showtime').value;
-      data.ticketPrice = +document.getElementById('md-ticket').value || 0;
+      data.ticketPrice = ticket;
       data.companions = document.getElementById('md-companions').value;
     }
     if (category === '电视剧' || category === '综艺') {
@@ -938,13 +1065,28 @@ ${Utils.escape(text)}</div>`;
       data.abandonReason = document.getElementById('md-abandon').value;
     }
     if (status === '已看完') data.progress = 100;
-    Store.add('media', data);
-    /* 自动记忆：影院 / 题材标签 / 同行人，供下次模糊联想 */
+
+    let mediaId;
+    if (editId) { Store.update('media', editId, data); mediaId = editId; }
+    else { const saved = Store.add('media', data); mediaId = saved.id; }
+
+    /* 内联摘抄 / 笔记：同步到 media_notes（类型「摘抄」「笔记」） */
+    const excerpt = document.getElementById('md-excerpt').value.trim();
+    const note = document.getElementById('md-note').value.trim();
+    if (editId) {
+      this._reconcileInlineNote(mediaId, '摘抄', excerpt);
+      this._reconcileInlineNote(mediaId, '笔记', note);
+    } else {
+      if (excerpt) Store.add('media_notes', { mediaId, noteType: '摘抄', content: excerpt, annotation: '', date: data.startDate || Utils.today(), fromOCR: false });
+      if (note) Store.add('media_notes', { mediaId, noteType: '笔记', content: note, annotation: '', date: data.startDate || Utils.today(), fromOCR: false });
+    }
+
+    /* 自动记忆：影院 / 题材标签 / 同行人 */
     if (data.cinema) Store.rememberInput('cinema', data.cinema);
     if (data.tags) Store.rememberInput('mediaTags', data.tags);
     if (data.companions) Store.rememberInput('companions', data.companions);
-    // 纪录片纳入学习计划
-    if (data.addToStudy) {
+    // 纪录片纳入学习计划（仅新增时写入，避免编辑时重复生成）
+    if (!editId && data.addToStudy) {
       Store.add('study_records', {
         content: '纪录片《' + title + '》', type: '纪录片', duration: 0,
         date: data.startDate, note: data.docTopic + ': ' + (data.docReflection || '')
@@ -952,7 +1094,18 @@ ${Utils.escape(text)}</div>`;
     }
     App.clearDraft('media');
     this._mediaImages = [];
-    App.closeModal(); App.showToast(I18n.t('added'), 'success'); App.render();
+    App.closeModal(); App.showToast(editId ? (I18n.t('saved') || '已保存') : I18n.t('added'), 'success'); App.render();
+  },
+
+  /* 影音内联摘抄/笔记：编辑时与表单字段保持一致（有内容则更新/新建，无内容则删除） */
+  _reconcileInlineNote(mediaId, type, content) {
+    const existing = Store.filter('media_notes', n => n.mediaId === mediaId && n.noteType === type);
+    if (content) {
+      if (existing.length) Store.update('media_notes', existing[0].id, { content, annotation: '', date: Utils.today(), fromOCR: false });
+      else Store.add('media_notes', { mediaId, noteType: type, content, annotation: '', date: Utils.today(), fromOCR: false });
+    } else {
+      existing.forEach(n => Store.remove('media_notes', n.id));
+    }
   },
 
   delMedia(id) {
@@ -985,7 +1138,7 @@ ${Utils.escape(text)}</div>`;
       <div class="label-pair"><span class="lk">状态</span><span class="vk">${m.status} ${m.progress}%</span></div>
       <div class="label-pair"><span class="lk">日期</span><span class="vk">${m.startDate || ''} ~ ${m.endDate || ''}</span></div>
       ${m.rating > 0 ? `<div class="label-pair"><span class="lk">评分</span><span class="vk">${'⭐'.repeat(m.rating)}</span></div>` : ''}
-      ${m.cost > 0 ? `<div class="label-pair"><span class="lk">花销</span><span class="vk">¥${m.cost}</span></div>` : ''}
+      ${m.cost > 0 && m.category !== '电影' ? `<div class="label-pair"><span class="lk">花销</span><span class="vk">¥${m.cost}</span></div>` : ''}
       ${m.channel ? `<div class="label-pair"><span class="lk">渠道</span><span class="vk">${m.channel}</span></div>` : ''}
       ${m.cinema ? `<div class="label-pair"><span class="lk">影院</span><span class="vk">${Utils.escape(m.cinema)} · ${m.showTime}</span></div>` : ''}
       ${m.ticketPrice > 0 ? `<div class="label-pair"><span class="lk">票价</span><span class="vk">¥${m.ticketPrice}</span></div>` : ''}
@@ -1012,6 +1165,7 @@ ${Utils.escape(text)}</div>`;
       `).join('') || '<div class="text-light text-sm">暂无摘抄笔记</div>'}
       <div class="modal-actions">
         <button class="btn-cancel" onclick="App.closeModal()">${I18n.t('close')}</button>
+        <button class="btn-outline" onclick="App.closeModal();StudyMod.editMedia(${id})">编辑</button>
         <button class="btn-outline" onclick="App.closeModal();StudyMod.exportMedia(${id})">导出</button>
       </div>
     `);
@@ -1030,7 +1184,7 @@ ${Utils.escape(text)}</div>`;
 
   mediaNoteForm(n, mediaId) {
     const isEdit = !!n;
-    const types = ['台词摘抄', '观后感', '知识点', '追剧随笔'];
+    const types = ['台词摘抄', '观后感', '知识点', '追剧随笔', '摘抄', '笔记'];
     return `
       <div class="modal-title">${isEdit ? '✏️ 修改摘抄/笔记' : '添加摘抄/笔记'}</div>
       <div class="form-group"><label class="form-label">类型</label><select id="mn-type">${types.map(t => `<option${isEdit && n.noteType === t ? ' selected' : ''}>${t}</option>`).join('')}</select></div>

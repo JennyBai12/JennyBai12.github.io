@@ -441,6 +441,20 @@ input[type=radio], input[type=checkbox] { width: auto; margin-right: 6px; }
   outline: none; transition: border-color 0.2s;
 }
 .search-input:focus { border-color: var(--accent); }
+
+/* ===== 搜索栏 / 日期范围筛选 ===== */
+.search-bar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
+.search-bar .search-input { flex: 1; min-width: 120px; }
+.date-range { display: flex; align-items: center; gap: 6px; }
+.date-input {
+  padding: 7px 10px; border: 1px solid var(--deep); border-radius: 8px;
+  font-size: 13px; background: var(--card); color: var(--text); outline: none;
+}
+.date-input:focus { border-color: var(--accent); }
+.date-sep { color: var(--text-light); font-size: 13px; }
+.filter-tip { font-size: 12px; color: var(--text-light); margin-bottom: 10px; line-height: 1.5; }
+.link-reset { color: var(--accent); cursor: pointer; margin-left: 4px; font-weight: 600; }
+.link-reset:hover { text-decoration: underline; }
 .btn-danger {
   background: #c0392b; color: #fff; border: none; border-radius: 8px;
   padding: 8px 16px; cursor: pointer; font-size: 14px; transition: opacity 0.2s;
