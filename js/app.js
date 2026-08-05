@@ -16,7 +16,7 @@ const App = {
     { id: 'reminders', icon: '⏰', label: 'reminders' },
     { id: 'calendar', icon: '📅', label: 'calendar' },
   ],
-  APP_VERSION: 'v36',
+  APP_VERSION: 'v37',
 
   /* 版本更新说明：新版本上线后首次打开自动弹窗展示，并同步推送至收件箱 */
   CHANGELOG: {
@@ -73,6 +73,11 @@ const App = {
     'v36': [
       '🧹 自动清理旧版本通知：每次版本升级时，收件箱里旧的「已更新到 vXX」系统通知会被自动移除，只保留最新一条，避免历史 UTC 时间消息继续显示错误时间',
       '🕐 修复旧版本通知时间残留：已升级到 v35 的用户，旧 v33 / v34 等通知的时间字段仍是 UTC，v36 会在推送新版本通知时一并清理'
+    ],
+    'v37': [
+      '🔥 修复热点资讯通知点击跳转：收件箱「热点资讯已更新」消息原先跳转到不存在的 news 模块，现在正确进入「热点资讯」资讯流',
+      '🔥 修复热点模块子标签同步：从收件箱进入热点时自动切换到「资讯流」标签',
+      '🔥 优化「上次抓取」时间显示：增加数据兜底，并同时展示相对时间 + 绝对北京时间，避免只显示「N 小时前」导致误判为旧数据'
     ]
   },
 
@@ -202,6 +207,8 @@ const App = {
     }
     this.currentModule = module;
     this.currentSubModule = sub || null;
+    // 子模块/子标签同步
+    if (module === 'hotspot' && sub && typeof NewsMod !== 'undefined') NewsMod.subTab = sub;
     // 更新导航高亮（无论是否有 sub）
     document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
     document.querySelectorAll('.bn-item').forEach(el => el.classList.remove('active'));

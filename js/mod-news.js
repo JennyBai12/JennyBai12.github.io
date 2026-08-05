@@ -29,13 +29,21 @@ const NewsMod = {
   setSub(tab) { this.subTab = tab; App.render(); },
 
   lastCrawlText() {
-    const t = +(localStorage.getItem(this.LAST_CRAWL_KEY) || 0);
+    let t = +(localStorage.getItem(this.LAST_CRAWL_KEY) || 0);
+    // 兜底：如果本地时间戳缺失/异常，取 hotspot_data 中最新的 crawlTime
+    if (!t) {
+      const times = Store.get('hotspot_data')
+        .map(d => new Date(d.crawlTime).getTime())
+        .filter(x => !isNaN(x));
+      if (times.length) t = Math.max(...times);
+    }
     if (!t) return '尚未抓取';
     const diff = Date.now() - t;
-    if (diff < 60000) return '刚刚';
-    if (diff < 3600000) return Math.floor(diff / 60000) + ' 分钟前';
-    if (diff < 86400000) return Math.floor(diff / 3600000) + ' 小时前';
-    return Utils.formatBeijing(t);
+    const abs = Utils.formatBeijing(t);
+    if (diff < 60000) return `刚刚 · ${abs}`;
+    if (diff < 3600000) return `${Math.floor(diff / 60000)} 分钟前 · ${abs}`;
+    if (diff < 86400000) return `${Math.floor(diff / 3600000)} 小时前 · ${abs}`;
+    return abs;
   },
 
   /* ===== 资讯流 ===== */
@@ -627,7 +635,7 @@ const NewsMod = {
           type: 'info', source: '热点资讯', title: '热点资讯已更新',
           content: `自动抓取新增 ${res.added} 条资讯`,
           date: Utils.now(),
-          read: false, actionModule: 'news', actionSub: 'feed', actionId: 0, auto: true
+          read: false, actionModule: 'hotspot', actionSub: 'feed', actionId: 0, auto: true
         });
         if (App.refreshNotifications) App.refreshNotifications();
         if (App.currentModule === 'news') App.render();
