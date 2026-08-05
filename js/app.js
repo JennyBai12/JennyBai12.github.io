@@ -16,7 +16,7 @@ const App = {
     { id: 'reminders', icon: '⏰', label: 'reminders' },
     { id: 'calendar', icon: '📅', label: 'calendar' },
   ],
-  APP_VERSION: 'v35',
+  APP_VERSION: 'v36',
 
   /* 版本更新说明：新版本上线后首次打开自动弹窗展示，并同步推送至收件箱 */
   CHANGELOG: {
@@ -69,6 +69,10 @@ const App = {
       '🎬 影音记录新增「按日期 / 时间段搜索 + 评分下拉筛选」：快捷时段（全部 / 近7天 / 近30天 / 今年）+ 自定义起止日期 + 评分（全部 / 5星 / 4星以上 / 3星以上 / 2星以上 / 1星以上 / 未评）',
       '📚 阅读管理新增「搜索栏 + 评分下拉 + 汇总」：可按书名 / 作者 / 分类关键词搜索，按评分筛选（高分 ≥4⭐ / 中评 3⭐ / 低评 ≤2⭐ / 未评），并展示阅读汇总（共 N 本 · 已读 / 在读 / 待读 / 弃读 · 平均评分）',
       '📖 学习记录新增「汇总」面板：当前筛选下的记录数、总时长、覆盖天数、日均时长，以及最活跃类型'
+    ],
+    'v36': [
+      '🧹 自动清理旧版本通知：每次版本升级时，收件箱里旧的「已更新到 vXX」系统通知会被自动移除，只保留最新一条，避免历史 UTC 时间消息继续显示错误时间',
+      '🕐 修复旧版本通知时间残留：已升级到 v35 的用户，旧 v33 / v34 等通知的时间字段仍是 UTC，v36 会在推送新版本通知时一并清理'
     ]
   },
 
@@ -96,6 +100,10 @@ const App = {
     // 同步推送至收件箱：仅真实版本升级时推送一次，避免重复；从点击版本号手动重看时不重复推送
     const pushedKey = 'versionInboxPushed';
     if (!force && Store.getSetting(pushedKey, '') !== this.APP_VERSION) {
+      // 清理旧版本通知：避免 v35 之前的 UTC 时间消息继续显示错误时间
+      const inbox = Store.get('inbox');
+      const cleaned = inbox.filter(i => !(i.type === '系统通知' && /已更新到\s*v\d+/i.test(String(i.title || ''))));
+      if (cleaned.length !== inbox.length) Store.save('inbox', cleaned);
       Store.add('inbox', {
         type: '系统通知', source: 'system',
         title: `🎉 已更新到 ${this.APP_VERSION}`,
