@@ -31,6 +31,12 @@ const App = {
     Cloud.updateSyncIndicator();
     // 注册 Service Worker（PWA 离线缓存 + 资源加速）
     if ('serviceWorker' in navigator) {
+      let refreshing = false;
+      navigator.serviceWorker.addEventListener('controllerchange', () => {
+        if (refreshing) return;        // 防止更新后的重复刷新循环
+        refreshing = true;
+        location.reload();             // 新版本接管后自动刷新，确保用户始终用上最新代码
+      });
       navigator.serviceWorker.register('sw.js').catch(() => {});
     }
     // 热点资讯：后台自动增量抓取（每2小时检查一次）

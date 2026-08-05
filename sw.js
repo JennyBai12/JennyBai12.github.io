@@ -1,5 +1,5 @@
 // PWA Service Worker - 离线缓存
-const CACHE = 'diary-v26';
+const CACHE = 'diary-v27';
 const ASSETS = ['/', '/index.html', '/css/style.css', '/manifest.json', '/js/i18n.js', '/js/store.js', '/js/cloud.js', '/js/charts.js', '/js/utils.js', '/js/task-aggregate.js', '/js/app.js', '/js/mod-habits.js', '/js/mod-study.js', '/js/mod-health.js', '/js/mod-work.js', '/js/mod-news.js', '/js/mod-diary.js', '/js/mod-wardrobe.js', '/js/mod-goods.js', '/js/mod-savings.js', '/js/mod-reminders.js', '/js/mod-calendar.js'];
 
 self.addEventListener('install', (e) => {
@@ -30,7 +30,7 @@ self.addEventListener('fetch', (e) => {
   }
 
   e.respondWith(
-    fetch(e.request).then((resp) => {
+    fetch(e.request, { cache: 'reload' }).then((resp) => {
       if (resp && resp.status === 200) {
         const clone = resp.clone();
         caches.open(CACHE).then((c) => c.put(e.request, clone));
