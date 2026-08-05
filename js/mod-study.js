@@ -675,6 +675,18 @@ ${Utils.escape(text)}</div>`;
     });
   },
 
+  removeSavedMediaImage(id, idx) {
+    const m = Store.find('media', x => x.id === id);
+    if (!m || !Array.isArray(m.images)) return;
+    App.confirm('确认删除这张图片？', () => {
+      const imgs = m.images.slice();
+      imgs.splice(idx, 1);
+      Store.update('media', id, { images: imgs });
+      App.showToast('图片已删除', 'success');
+      this.mediaDetail(id);
+    });
+  },
+
   mediaDetail(id) {
     const m = Store.find('media', x => x.id === id);
     const notes = Store.filter('media_notes', n => n.mediaId === id).sort((a, b) => b.date.localeCompare(a.date));
@@ -696,7 +708,7 @@ ${Utils.escape(text)}</div>`;
       ${m.docKnowledge ? `<div class="label-pair"><span class="lk">知识点</span><span class="vk">${Utils.escape(m.docKnowledge)}</span></div>` : ''}
       ${m.docReflection ? `<div class="label-pair"><span class="lk">心得</span><span class="vk">${Utils.escape(m.docReflection)}</span></div>` : ''}
       ${m.abandonReason ? `<div class="label-pair"><span class="lk">弃看原因</span><span class="vk">${Utils.escape(m.abandonReason)}</span></div>` : ''}
-      ${(m.images && m.images.length) ? `<div class="divider"></div><div class="text-sm text-bold mb-8">🖼 票根 / 海报</div>${App.renderImageGrid(m.images, '')}` : ''}
+      ${(m.images && m.images.length) ? `<div class="divider"></div><div class="text-sm text-bold mb-8">🖼 票根 / 海报</div>${App.renderImageGrid(m.images, '', i => `StudyMod.removeSavedMediaImage(${m.id}, ${i})`)}` : ''}
       <div class="divider"></div>
       <div class="flex-between mb-8"><div class="subsection-title" style="margin:0;">摘抄/笔记 (${notes.length})</div><button class="btn btn-outline btn-sm" onclick="App.closeModal();StudyMod.addMediaNote(${id})">+ 添加</button></div>
       ${notes.map(n => `

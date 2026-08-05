@@ -944,20 +944,33 @@ const App = {
     });
   },
 
-  /* ===== 图片网格渲染 ===== */
-  renderImageGrid(images, prefix) {
+  /* ===== 图片网格渲染 =====
+   * @param {string} prefix 模块前缀，用于通用删除分支
+   * @param {function(number): string} [customRemoveAction] 自定义删除按钮 onclick，参数为图片索引
+   */
+  renderImageGrid(images, prefix, customRemoveAction) {
     if (!images || images.length === 0) return '';
-    return `<div class="img-grid">${images.map((img, i) =>
-      `<div class="img-thumb-wrap"><img class="img-thumb" src="${img}" onclick="App.openImageViewer('${img}')">${prefix ? `<button class="img-thumb-del" onclick="App.removeImage('${prefix}',${i})">✕</button>` : ''}</div>`
-    ).join('')}</div>`;
+    return `<div class="img-grid">${images.map((img, i) => {
+      const action = customRemoveAction ? customRemoveAction(i) : (prefix ? `App.removeImage('${prefix}',${i})` : '');
+      return `<div class="img-thumb-wrap"><img class="img-thumb" src="${img}" onclick="App.openImageViewer('${img}')">${action ? `<button class="img-thumb-del" onclick="${action}">✕</button>` : ''}</div>`;
+    }).join('')}</div>`;
   },
 
   removeImage(prefix, index) {
-    if (prefix === 'outfit' && WardrobeMod._outfitImages) {
-      WardrobeMod._outfitImages.splice(index, 1);
-      const el = document.getElementById('outfit-imgs');
-      if (el) el.innerHTML = App.renderImageGrid(WardrobeMod._outfitImages, 'outfit');
-    }
+    const targets = {
+      outfit:  { arr: () => WardrobeMod._outfitImages, elId: 'outfit-imgs' },
+      media:   { arr: () => StudyMod._mediaImages,     elId: 'md-imgs' },
+      diary:   { arr: () => DiaryMod._images,          elId: 'diary-imgs' },
+      posture: { arr: () => HealthMod._postureImgs,    elId: 'posture-imgs' },
+      skin:    { arr: () => HealthMod._skinImgs,       elId: 'skin-imgs' },
+    };
+    const t = targets[prefix];
+    if (!t) return;
+    const arr = t.arr();
+    if (!arr || !Array.isArray(arr)) return;
+    arr.splice(index, 1);
+    const el = document.getElementById(t.elId);
+    if (el) el.innerHTML = App.renderImageGrid(arr, prefix);
   },
 
   /* ===== 全局备份/导出（exportBackup 的别名，保持向后兼容） ===== */

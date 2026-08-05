@@ -210,15 +210,12 @@ const Utils = {
     let worker = null;
     try {
       report('正在启动识别引擎…', 1);
-      // tesseract.js v4 用 createWorker(options) + loadLanguage/initialize；
-      // v5 改成 createWorker(langs, oem, options)。这里两种都兼容。
-      worker = await T.createWorker(opts);
+      // tesseract.js v4 与 v5 都支持 createWorker(langs, oem, options)
+      // v4 返回的 worker 仍有 loadLanguage/initialize 方法，需要手动再初始化一次确保语言包生效
+      worker = await T.createWorker(langs, 1, opts);
       if (worker && typeof worker.loadLanguage === 'function') {
         await worker.loadLanguage(langs);
         await worker.initialize(langs);
-      } else {
-        if (worker && worker.terminate) { try { await worker.terminate(); } catch (e) {} }
-        worker = await T.createWorker(langs, 1, opts);
       }
       report('识别文字中…', 0);
       const { data } = await worker.recognize(dataUrl);
@@ -226,6 +223,59 @@ const Utils = {
     } finally {
       if (worker) { try { await worker.terminate(); } catch (e) {} }
     }
+  },
+
+  /* 图片预处理：灰度 + 自适应二值化 + 放大，提高中文识别率 */
+  async preprocessForOCR(dataUrl, maxDim = 1600) {
+    const img = await Utils._loadImage(dataUrl);
+    const scale = Math.min(2.5, Math.max(1, maxDim / Math.max(img.width, img.height)));
+    const w = Math.round(img.width * scale);
+    const h = Math.round(img.height * scale);
+    const canvas = document.createElement('canvas');
+    canvas.width = w; canvas.height = h;
+    const ctx = canvas.getContext('2d');
+    ctx.drawImage(img, 0, 0, w, h);
+    const imgData = ctx.getImageData(0, 0, w, h);
+    const d = imgData.data;
+    // 灰度
+    for (let i = 0; i < d.length; i += 4) {
+      const g = 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2];
+      d[i] = d[i + 1] = d[i + 2] = g;
+    }
+    // 简单自适应阈值（ Sauvola 简化版：局部均值阈值）
+    const gray = new Float32Array(w * h);
+    for (let y = 0; y < h; y++) {
+      for (let x = 0; x < w; x++) {
+        gray[y * w + x] = d[(y * w + x) * 4];
+      }
+    }
+    const r = 15;
+    const out = new Uint8ClampedArray(w * h);
+    for (let y = 0; y < h; y++) {
+      for (let x = 0; x < w; x++) {
+        let sum = 0, sum2 = 0, n = 0;
+        for (let dy = -r; dy <= r; dy++) {
+          const yy = y + dy;
+          if (yy < 0 || yy >= h) continue;
+          for (let dx = -r; dx <= r; dx++) {
+            const xx = x + dx;
+            if (xx < 0 || xx >= w) continue;
+            const v = gray[yy * w + xx];
+            sum += v; sum2 += v * v; n++;
+          }
+        }
+        const mean = sum / n;
+        const std = Math.sqrt(Math.max(0, sum2 / n - mean * mean));
+        const threshold = mean * (1 + 0.2 * ((std / 128) - 1));
+        out[y * w + x] = gray[y * w + x] < threshold ? 0 : 255;
+      }
+    }
+    for (let i = 0; i < out.length; i++) {
+      d[i * 4] = d[i * 4 + 1] = d[i * 4 + 2] = out[i];
+      d[i * 4 + 3] = 255;
+    }
+    ctx.putImageData(imgData, 0, 0);
+    return canvas.toDataURL('image/png');
   },
 
   /* 统一的 OCR 执行器：负责进度条 UI、错误兜底与「粘贴文字」降级入口 */
@@ -245,7 +295,8 @@ const Utils = {
 
     Utils.readFileAsDataURL(file, async (url) => {
       try {
-        const text = await Utils.ocrImage(url, 'chi_sim+eng', (label, pct) => {
+        const processed = await Utils.preprocessForOCR(url);
+        const text = await Utils.ocrImage(processed, 'chi_sim+eng', (label, pct) => {
           const l = document.getElementById(areaId + '-label');
           const b = document.getElementById(areaId + '-bar');
           if (l) l.textContent = `${label} ${pct}%`;
