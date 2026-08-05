@@ -16,7 +16,7 @@ const App = {
     { id: 'reminders', icon: '⏰', label: 'reminders' },
     { id: 'calendar', icon: '📅', label: 'calendar' },
   ],
-  APP_VERSION: 'v30',
+  APP_VERSION: 'v31',
 
   /* 版本更新说明：新版本上线后首次打开自动弹窗展示，并同步推送至收件箱 */
   CHANGELOG: {
@@ -33,6 +33,15 @@ const App = {
     'v30': [
       '📣 版本更新说明新增「收件箱同步」：每次自动弹出更新说明的同时，自动推送一条「已更新到 v30」消息到收件箱（含本次更新内容），可在收件箱随时回看',
       '📣 点击右下角版本号可随时重看历史更新说明'
+    ],
+    'v31': [
+      '💰 历史存档可修改 / 删除：每条存档快照现在支持编辑与删除，不再永久锁定',
+      '💰 登记 / 编辑存档支持负数（金额可输入负号 -，如透支 / 负债）',
+      '💰 月度计划支出改为「按分类填写」（车贷、房贷、生活等），自动汇总总额',
+      '💰 新增「发薪日」设置（可修改），按发薪日划分月度周期、据当前日期重算「截至今日理论预期结余」',
+      '💰 新增「年存款目标」与达成比例进度条',
+      '💰 新增「计划支出项」（养老金 / 保险 / 大疆等）：含截止时间、预估花费，与「攒到多少才能购入」的门槛及进度',
+      '🔒 私密日记与储蓄记录：退出当前界面再点进去会重新要求输入密码'
     ]
   },
 
@@ -148,6 +157,12 @@ const App = {
   },
 
   navigate(module, sub) {
+    const prev = this.currentModule;
+    // 离开保密模块（私密日记 / 储蓄）后，再进入需重新输入密码
+    if (prev !== module) {
+      if (prev === 'diary' && typeof DiaryMod !== 'undefined') DiaryMod._unlocked = false;
+      if (prev === 'savings' && typeof SavingsMod !== 'undefined') SavingsMod._unlocked = false;
+    }
     this.currentModule = module;
     this.currentSubModule = sub || null;
     // 更新导航高亮（无论是否有 sub）

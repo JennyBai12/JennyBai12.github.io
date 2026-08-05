@@ -780,6 +780,25 @@ input[type=radio], input[type=checkbox] { width: auto; margin-right: 6px; }
 /* ===== 储蓄板块（v29 改版） ===== */
 .text-danger { color: var(--danger) !important; }
 
+/* ===== 储蓄板块（v31 增强） ===== */
+.plan-item {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 12px 14px;
+  margin-top: 10px;
+}
+.plan-name { font-weight: 600; font-size: 15px; }
+.plan-actions { display: flex; gap: 10px; align-items: center; }
+.status-line.status-muted {
+  background: var(--bg-soft); color: var(--text-light);
+  border: 1px solid var(--border);
+}
+.status-line.status-ok {
+  background: rgba(120,170,120,0.14); color: var(--ok);
+  border: 1px solid rgba(120,170,120,0.4);
+}
+.progress-fill.ok { background: linear-gradient(90deg, #7FB77E, #4E944F); }
+
 .sv-pf-row { display: flex; gap: 8px; align-items: center; margin-bottom: 8px; }
 .sv-pf-row input[type="text"] { flex: 1.4; }
 .sv-pf-row input[type="number"] { flex: 1; }

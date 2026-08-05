@@ -169,8 +169,10 @@ const Store = {
     savings_goals: { fields: ['name','target','current','deadline'], seed: [
       { id:1, name:'年度旅行基金', target:20000, current:8500, deadline:'2026-12-31' },
     ]},
-    /* ===== 储蓄板块：存档快照（每次登记生成独立锁定快照） ===== */
-    savings_snapshots: { fields: ['ts','date','platforms','balance','monthlyIncome','monthlyExpense'], seed: [] },
+    /* ===== 储蓄板块：存档快照（每次登记生成独立快照，历史可修改） ===== */
+    savings_snapshots: { fields: ['ts','date','platforms','balance','monthlyIncome','monthlyExpense','monthlyExpenseBreakdown','payday'], seed: [] },
+    /* ===== 储蓄板块：计划支出项（养老金/保险/大疆等），含截止时间与购入门槛 ===== */
+    savings_plans: { fields: ['name','cost','deadline','requireBalance','note','done'], seed: [] },
     spending_threshold: { fields: ['month','threshold','alert80','alert100','alert120','lockExplain'], seed: [
       { id:1, month:'2026-08', threshold:3000, alert80:false, alert100:false, alert120:false, lockExplain:'' },
     ]},
