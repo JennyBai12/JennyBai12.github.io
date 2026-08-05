@@ -165,18 +165,31 @@ const StudyMod = {
         <div class="card" style="padding:10px;">
           <div style="font-size:14px;">"${Utils.escape(e.text)}"</div>
           ${e.annotation ? `<div class="text-sm text-light mt-8">批注：${Utils.escape(e.annotation)}</div>` : ''}
-          <div class="text-sm text-light">${e.date}</div>
+          <div class="flex-between mt-8">
+            <span class="text-sm text-light">${e.date}</span>
+            <span class="flex gap-8">
+              <button class="btn btn-outline btn-sm" onclick="StudyMod.editExcerpt(${e.id})">修改</button>
+              <button class="btn btn-cancel btn-sm" onclick="StudyMod.delExcerpt(${e.id})">删除</button>
+            </span>
+          </div>
         </div>
       `).join('') || '<div class="text-light text-sm">暂无摘抄</div>'}
       <div class="divider"></div>
-      <div class="flex-between mb-8"><div class="subsection-title" style="margin:0;">观后感 (${reviews.length})</div><button class="btn btn-outline btn-sm" onclick="StudyMod.addReview(${id})">+ 观后感</button></div>
+      <div class="flex-between mb-8"><div class="subsection-title" style="margin:0;">读后感 (${reviews.length})</div><button class="btn btn-outline btn-sm" onclick="StudyMod.addReview(${id})">+ 读后感</button></div>
       ${reviews.map(r => `
         <div class="card" style="padding:10px;">
           <div class="text-bold">${Utils.escape(r.title)}</div>
-          <div class="text-sm mt-8">${Utils.escape(r.content)}</div>
-          <div class="text-sm text-light mt-8">${'⭐'.repeat(r.rating)} · ${r.date}</div>
+          <div class="text-sm mt-8" style="white-space:pre-wrap;">${Utils.escape(r.content)}</div>
+          ${r.tags ? `<div class="mt-8">${String(r.tags).split(/[,，]/).filter(Boolean).map(t => `<span class="tag-small">${Utils.escape(t.trim())}</span>`).join(' ')}</div>` : ''}
+          <div class="flex-between mt-8">
+            <span class="text-sm text-light">${'⭐'.repeat(r.rating || 0)} · ${r.date}</span>
+            <span class="flex gap-8">
+              <button class="btn btn-outline btn-sm" onclick="StudyMod.editReview(${r.id})">修改</button>
+              <button class="btn btn-cancel btn-sm" onclick="StudyMod.delReview(${r.id})">删除</button>
+            </span>
+          </div>
         </div>
-      `).join('') || '<div class="text-light text-sm">暂无观后感</div>'}
+      `).join('') || '<div class="text-light text-sm">暂无读后感</div>'}
       <div class="modal-actions"><button class="btn-cancel" onclick="App.closeModal()">${I18n.t('close')}</button></div>
     `);
   },
@@ -269,33 +282,108 @@ const StudyMod = {
     const text = document.getElementById('ex-text').value.trim();
     if (!text) { App.showToast(I18n.t('fillRequired'), 'error'); return; }
     Store.add('book_excerpts', { bookId, text, annotation: document.getElementById('ex-annotation').value, date: Utils.today() });
-    App.closeModal(); App.showToast(I18n.t('added'), 'success');
+    App.showToast(I18n.t('added'), 'success');
+    this.bookDetail(bookId);
   },
 
-  addReview(bookId) {
+  /* ===== 摘抄 修改 / 删除 ===== */
+  editExcerpt(id) {
+    const e = Store.find('book_excerpts', x => x.id === id);
+    if (!e) return;
     App.closeModal();
     App.openModal(`
-      <div class="modal-title">撰写观后感</div>
-      <div class="form-group"><label class="form-label">标题 <span class="req">*</span></label><input type="text" id="rv-title"></div>
-      <div class="form-group"><label class="form-label">内容</label><textarea id="rv-content" rows="6"></textarea></div>
-      <div class="form-group"><label class="form-label">评分</label><div class="tag-pick" id="rv-rating">${[1,2,3,4,5].map(n => `<span class="tag" data-v="${n}" onclick="document.querySelectorAll('#rv-rating .tag').forEach(e=>e.classList.remove('active'));this.classList.add('active');">⭐${n}</span>`).join('')}</div></div>
-      <div class="form-group"><label class="form-label">标签</label><input type="text" id="rv-tags" placeholder="逗号分隔"></div>
-      <div class="modal-actions"><button class="btn-cancel" onclick="App.closeModal()">${I18n.t('cancel')}</button><button class="btn-confirm" onclick="StudyMod.saveReview(${bookId})">${I18n.t('save')}</button></div>
+      <div class="modal-title">✏️ 修改摘抄</div>
+      <div class="form-group"><label class="form-label">摘抄内容 <span class="req">*</span></label><textarea id="ex-text" rows="4">${Utils.escape(e.text || '')}</textarea></div>
+      <div class="form-group"><label class="form-label">批注</label><input type="text" id="ex-annotation" value="${Utils.escape(e.annotation || '')}"></div>
+      <div class="form-group"><label class="form-label">日期</label><input type="date" id="ex-date" value="${e.date || Utils.today()}"></div>
+      <div class="modal-actions">
+        <button class="btn-cancel" onclick="StudyMod.bookDetail(${e.bookId})">${I18n.t('cancel')}</button>
+        <button class="btn-confirm" onclick="StudyMod.updateExcerpt(${id})">${I18n.t('save')}</button>
+      </div>
     `);
   },
 
-  saveReview(bookId) {
+  updateExcerpt(id) {
+    const text = document.getElementById('ex-text').value.trim();
+    if (!text) { App.showToast(I18n.t('fillRequired'), 'error'); return; }
+    const e = Store.find('book_excerpts', x => x.id === id);
+    Store.update('book_excerpts', id, {
+      text, annotation: document.getElementById('ex-annotation').value,
+      date: document.getElementById('ex-date').value || Utils.today()
+    });
+    App.showToast(I18n.t('saved'), 'success');
+    this.bookDetail(e.bookId);
+  },
+
+  delExcerpt(id) {
+    const e = Store.find('book_excerpts', x => x.id === id);
+    if (!e) return;
+    const bookId = e.bookId;
+    App.confirm('确定删除这条摘抄吗？删除后不可恢复。', () => {
+      Store.remove('book_excerpts', id);
+      App.showToast(I18n.t('deleted') || '已删除', 'success');
+      StudyMod.bookDetail(bookId);
+    }, '删除摘抄');
+  },
+
+  /* ===== 读后感 新增 / 修改 / 删除 ===== */
+  addReview(bookId) {
+    App.closeModal();
+    App.openModal(this.reviewForm(null, bookId));
+    App.bindSuggest('rv-tags', Store.historyOf('reviewTags'), { multi: true, historyKey: 'reviewTags' });
+  },
+
+  editReview(id) {
+    const r = Store.find('book_reviews', x => x.id === id);
+    if (!r) return;
+    App.closeModal();
+    App.openModal(this.reviewForm(r, r.bookId));
+    App.bindSuggest('rv-tags', Store.historyOf('reviewTags'), { multi: true, historyKey: 'reviewTags' });
+  },
+
+  reviewForm(r, bookId) {
+    const isEdit = !!r;
+    const rating = isEdit ? (r.rating || 0) : 0;
+    return `
+      <div class="modal-title">${isEdit ? '✏️ 修改读后感' : '撰写读后感'}</div>
+      <div class="form-group"><label class="form-label">标题 <span class="req">*</span></label><input type="text" id="rv-title" value="${isEdit ? Utils.escape(r.title || '') : ''}"></div>
+      <div class="form-group"><label class="form-label">内容</label><textarea id="rv-content" rows="6">${isEdit ? Utils.escape(r.content || '') : ''}</textarea></div>
+      <div class="form-group"><label class="form-label">评分</label><div class="tag-pick" id="rv-rating">${[1,2,3,4,5].map(n => `<span class="tag${rating === n ? ' active' : ''}" data-v="${n}" onclick="document.querySelectorAll('#rv-rating .tag').forEach(e=>e.classList.remove('active'));this.classList.add('active');">⭐${n}</span>`).join('')}</div></div>
+      <div class="form-group"><label class="form-label">标签</label>${App.suggestInput({ id: 'rv-tags', value: isEdit ? (r.tags || '') : '', placeholder: '逗号分隔，输入即联想', className: '' })}</div>
+      <div class="form-group"><label class="form-label">日期</label><input type="date" id="rv-date" value="${isEdit ? (r.date || Utils.today()) : Utils.today()}"></div>
+      <div class="modal-actions">
+        <button class="btn-cancel" onclick="StudyMod.bookDetail(${bookId})">${I18n.t('cancel')}</button>
+        <button class="btn-confirm" onclick="StudyMod.saveReview(${bookId}, ${isEdit ? r.id : 'null'})">${I18n.t('save')}</button>
+      </div>`;
+  },
+
+  saveReview(bookId, reviewId) {
     const title = document.getElementById('rv-title').value.trim();
     if (!title) { App.showToast(I18n.t('fillRequired'), 'error'); return; }
     const ratingEl = document.querySelector('#rv-rating .tag.active');
-    Store.add('book_reviews', {
+    const payload = {
       bookId, title,
       content: document.getElementById('rv-content').value,
       rating: ratingEl ? +ratingEl.dataset.v : 0,
       tags: document.getElementById('rv-tags').value,
-      date: Utils.today()
-    });
-    App.closeModal(); App.showToast(I18n.t('saved'), 'success');
+      date: document.getElementById('rv-date').value || Utils.today()
+    };
+    if (reviewId) Store.update('book_reviews', reviewId, payload);
+    else Store.add('book_reviews', payload);
+    if (payload.tags) Store.rememberInput('reviewTags', payload.tags);
+    App.showToast(I18n.t('saved'), 'success');
+    this.bookDetail(bookId);
+  },
+
+  delReview(id) {
+    const r = Store.find('book_reviews', x => x.id === id);
+    if (!r) return;
+    const bookId = r.bookId;
+    App.confirm('确定删除这篇读后感吗？删除后不可恢复。', () => {
+      Store.remove('book_reviews', id);
+      App.showToast(I18n.t('deleted') || '已删除', 'success');
+      StudyMod.bookDetail(bookId);
+    }, '删除读后感');
   },
 
   editPlan() {
@@ -438,7 +526,7 @@ const StudyMod = {
           <option>想看</option><option>追更中</option><option>已看完</option><option>搁置弃看</option>
         </select></div>
       </div>
-      <div class="form-group"><label class="form-label">题材标签</label><input type="text" id="md-tags" placeholder="如：科幻,悬疑"></div>
+      <div class="form-group"><label class="form-label">题材标签</label>${App.suggestInput({ id: 'md-tags', placeholder: '如：科幻,悬疑（可多选，输入即联想）', className: '' })}</div>
       <div class="two-col">
         <div class="form-group"><label class="form-label">观看起始日期</label><input type="date" id="md-start" value="${Utils.today()}"></div>
         <div class="form-group"><label class="form-label">完结日期</label><input type="date" id="md-end"></div>
@@ -455,12 +543,12 @@ const StudyMod = {
         <div class="text-sm text-bold mb-8">🎬 电影专属</div>
         <div class="form-group"><label class="form-label">观看渠道</label><select id="md-channel"><option>影院观影</option><option>线上观看</option></select></div>
         <div class="two-col">
-          <div class="form-group"><label class="form-label">影院</label><input type="text" id="md-cinema" placeholder="如：万达影城IMAX厅"></div>
+          <div class="form-group"><label class="form-label">影院 <span class="text-light" style="font-weight:400;">🧠 已自动记忆</span></label>${App.suggestInput({ id: 'md-cinema', placeholder: '输入模糊字段即联想，如 万达', className: '' })}</div>
           <div class="form-group"><label class="form-label">场次时间</label><input type="text" id="md-showtime" placeholder="如：19:30"></div>
         </div>
         <div class="two-col">
           <div class="form-group"><label class="form-label">票价</label><input type="number" id="md-ticket" value="0"></div>
-          <div class="form-group"><label class="form-label">同行人员</label><input type="text" id="md-companions" placeholder="如：朋友"></div>
+          <div class="form-group"><label class="form-label">同行人员</label>${App.suggestInput({ id: 'md-companions', placeholder: '如：朋友', className: '' })}</div>
         </div>
       </div>
 
@@ -494,6 +582,31 @@ const StudyMod = {
       <div class="modal-actions"><button class="btn-cancel" onclick="App.closeModal()">${I18n.t('cancel')}</button><button class="btn-confirm" onclick="StudyMod.saveMedia()">${I18n.t('save')}</button></div>
     `);
     this.toggleMediaFields();
+    this.bindMediaSuggest();
+  },
+
+  /* 绑定影院 / 标签 / 同行人 的模糊建议数据源 */
+  bindMediaSuggest() {
+    App.bindSuggest('md-cinema', this.cinemaOptions(), { historyKey: 'cinema' });
+    App.bindSuggest('md-tags', this.mediaTagOptions(), { multi: true, historyKey: 'mediaTags' });
+    App.bindSuggest('md-companions', Store.historyOf('companions'), { multi: true, historyKey: 'companions' });
+  },
+
+  /* 影院候选 = 历史记忆 ∪ 已有记录中出现过的影院 */
+  cinemaOptions() {
+    const set = [];
+    const push = v => { const s = String(v || '').trim(); if (s && set.indexOf(s) === -1) set.push(s); };
+    Store.historyOf('cinema').forEach(push);
+    Store.get('media').forEach(m => push(m.cinema));
+    return set;
+  },
+
+  mediaTagOptions() {
+    const set = [];
+    const push = v => { const s = String(v || '').trim(); if (s && set.indexOf(s) === -1) set.push(s); };
+    Store.historyOf('mediaTags').forEach(push);
+    Store.get('media').forEach(m => String(m.tags || '').split(/[,，]/).forEach(push));
+    return set;
   },
 
   /* ===== 影音拍照识别 ===== */
@@ -656,6 +769,10 @@ ${Utils.escape(text)}</div>`;
     }
     if (status === '已看完') data.progress = 100;
     Store.add('media', data);
+    /* 自动记忆：影院 / 题材标签 / 同行人，供下次模糊联想 */
+    if (data.cinema) Store.rememberInput('cinema', data.cinema);
+    if (data.tags) Store.rememberInput('mediaTags', data.tags);
+    if (data.companions) Store.rememberInput('companions', data.companions);
     // 纪录片纳入学习计划
     if (data.addToStudy) {
       Store.add('study_records', {
@@ -714,8 +831,12 @@ ${Utils.escape(text)}</div>`;
       ${notes.map(n => `
         <div class="card" style="padding:10px;">
           <div class="flex-between"><span class="tag-small">${n.noteType}${n.fromOCR ? ' · OCR' : ''}</span><span class="text-sm text-light">${n.date}</span></div>
-          <div class="mt-8" style="font-size:14px;">${Utils.escape(n.content)}</div>
+          <div class="mt-8" style="font-size:14px;white-space:pre-wrap;">${Utils.escape(n.content)}</div>
           ${n.annotation ? `<div class="text-sm text-light mt-8">批注：${Utils.escape(n.annotation)}</div>` : ''}
+          <div class="flex gap-8 mt-8" style="justify-content:flex-end;">
+            <button class="btn btn-outline btn-sm" onclick="StudyMod.editMediaNote(${n.id})">修改</button>
+            <button class="btn btn-cancel btn-sm" onclick="StudyMod.delMediaNote(${n.id})">删除</button>
+          </div>
         </div>
       `).join('') || '<div class="text-light text-sm">暂无摘抄笔记</div>'}
       <div class="modal-actions">
@@ -726,19 +847,46 @@ ${Utils.escape(text)}</div>`;
   },
 
   addMediaNote(mediaId) {
-    App.openModal(`
-      <div class="modal-title">添加摘抄/笔记</div>
-      <div class="form-group"><label class="form-label">类型</label><select id="mn-type"><option>台词摘抄</option><option>观后感</option><option>知识点</option><option>追剧随笔</option></select></div>
-      <div class="form-group"><label class="form-label">内容 <span class="req">*</span></label><textarea id="mn-content" rows="4"></textarea></div>
-      <div class="form-group"><label class="form-label">批注</label><input type="text" id="mn-annotation"></div>
+    App.openModal(this.mediaNoteForm(null, mediaId));
+  },
+
+  editMediaNote(id) {
+    const n = Store.find('media_notes', x => x.id === id);
+    if (!n) return;
+    App.closeModal();
+    App.openModal(this.mediaNoteForm(n, n.mediaId));
+  },
+
+  mediaNoteForm(n, mediaId) {
+    const isEdit = !!n;
+    const types = ['台词摘抄', '观后感', '知识点', '追剧随笔'];
+    return `
+      <div class="modal-title">${isEdit ? '✏️ 修改摘抄/笔记' : '添加摘抄/笔记'}</div>
+      <div class="form-group"><label class="form-label">类型</label><select id="mn-type">${types.map(t => `<option${isEdit && n.noteType === t ? ' selected' : ''}>${t}</option>`).join('')}</select></div>
+      <div class="form-group"><label class="form-label">内容 <span class="req">*</span></label><textarea id="mn-content" rows="4">${isEdit ? Utils.escape(n.content || '') : ''}</textarea></div>
+      <div class="form-group"><label class="form-label">批注</label><input type="text" id="mn-annotation" value="${isEdit ? Utils.escape(n.annotation || '') : ''}"></div>
+      <div class="form-group"><label class="form-label">日期</label><input type="date" id="mn-date" value="${isEdit ? (n.date || Utils.today()) : Utils.today()}"></div>
       <div class="form-group">
         <label class="form-label">📷 图片转文字</label>
         <div class="img-upload-area" onclick="StudyMod.ocrMediaNote()">上传/拍摄截图识别</div>
         <div class="ocr-alt-row"><button type="button" class="btn-cancel btn-mini" onclick="StudyMod.pasteToField('mn-content','mn-ocr-area')">📋 粘贴文字</button></div>
         <div id="mn-ocr-area"></div>
       </div>
-      <div class="modal-actions"><button class="btn-cancel" onclick="App.closeModal()">${I18n.t('cancel')}</button><button class="btn-confirm" onclick="StudyMod.saveMediaNote(${mediaId})">${I18n.t('save')}</button></div>
-    `);
+      <div class="modal-actions">
+        <button class="btn-cancel" onclick="StudyMod.mediaDetail(${mediaId})">${I18n.t('cancel')}</button>
+        <button class="btn-confirm" onclick="StudyMod.saveMediaNote(${mediaId}, ${isEdit ? n.id : 'null'})">${I18n.t('save')}</button>
+      </div>`;
+  },
+
+  delMediaNote(id) {
+    const n = Store.find('media_notes', x => x.id === id);
+    if (!n) return;
+    const mediaId = n.mediaId;
+    App.confirm('确定删除这条摘抄/笔记吗？删除后不可恢复。', () => {
+      Store.remove('media_notes', id);
+      App.showToast(I18n.t('deleted') || '已删除', 'success');
+      StudyMod.mediaDetail(mediaId);
+    }, '删除笔记');
   },
 
   ocrMediaNote() {
@@ -755,15 +903,20 @@ ${Utils.escape(text)}</div>`;
     input.click();
   },
 
-  saveMediaNote(mediaId) {
+  saveMediaNote(mediaId, noteId) {
     const content = document.getElementById('mn-content').value.trim();
     if (!content) { App.showToast(I18n.t('fillRequired'), 'error'); return; }
-    Store.add('media_notes', {
+    const dateEl = document.getElementById('mn-date');
+    const payload = {
       mediaId, noteType: document.getElementById('mn-type').value,
       content, annotation: document.getElementById('mn-annotation').value,
-      date: Utils.today(), fromOCR: document.getElementById('mn-ocr-area').children.length > 0
-    });
-    App.closeModal(); App.showToast(I18n.t('added'), 'success');
+      date: (dateEl && dateEl.value) || Utils.today(),
+      fromOCR: document.getElementById('mn-ocr-area').children.length > 0
+    };
+    if (noteId) Store.update('media_notes', noteId, payload);
+    else Store.add('media_notes', payload);
+    App.showToast(I18n.t('saved') || '已保存', 'success');
+    this.mediaDetail(mediaId);
   },
 
   exportMedia(id) {

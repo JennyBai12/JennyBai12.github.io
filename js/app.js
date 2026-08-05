@@ -33,6 +33,8 @@ const App = {
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.register('sw.js').catch(() => {});
     }
+    // 热点资讯：后台自动增量抓取（每2小时检查一次）
+    if (typeof NewsMod !== 'undefined' && NewsMod.startAutoCrawl) NewsMod.startAutoCrawl();
   },
 
   /* 清理超过7天的收件箱消息 */
@@ -994,6 +996,94 @@ const App = {
       ).join('') : `<div class="text-light text-sm">${I18n.t('noChangeLog')}</div>`}
       <div class="modal-actions"><button class="btn-cancel" onclick="App.closeModal()">${I18n.t('close')}</button></div>
     `);
+  },
+
+  /* ===== 通用模糊建议输入框 =====
+   * 用法：
+   *   HTML:  ${App.suggestInput({ id:'md-cinema', value:x, placeholder:'如 万达影城' })}
+   *   绑定:  App.bindSuggest('md-cinema', Store.historyOf('cinema'));
+   *   多值:  App.bindSuggest('diary-tags', Store.historyOf('diaryTags'), { multi:true });
+   */
+  _suggest: {},
+
+  suggestInput(opt) {
+    opt = opt || {};
+    const id = opt.id;
+    const cls = opt.className || 'form-input';
+    return `<div class="suggest-wrap">
+      <input type="text" class="${cls}" id="${id}" autocomplete="off"
+        value="${Utils.escape(opt.value == null ? '' : opt.value)}"
+        placeholder="${Utils.escape(opt.placeholder || '')}"
+        oninput="App.showSuggest('${id}')" onfocus="App.showSuggest('${id}')"
+        onblur="App.blurSuggest('${id}')">
+      <div class="suggest-box hidden" id="${id}-suggest"></div>
+    </div>`;
+  },
+
+  bindSuggest(id, list, opts) {
+    opts = opts || {};
+    this._suggest[id] = {
+      list: (list || []).filter(v => v != null && String(v).trim() !== ''),
+      multi: !!opts.multi,
+      onPick: opts.onPick || null,
+      historyKey: opts.historyKey || null,
+    };
+  },
+
+  _suggestQuery(cfg, raw) {
+    if (!cfg.multi) return { q: raw.trim(), used: [] };
+    const parts = String(raw).split(/[,，]/);
+    return {
+      q: (parts[parts.length - 1] || '').trim(),
+      used: parts.slice(0, -1).map(s => s.trim()).filter(Boolean),
+    };
+  },
+
+  showSuggest(id) {
+    const cfg = this._suggest[id];
+    const input = document.getElementById(id);
+    const box = document.getElementById(id + '-suggest');
+    if (!cfg || !input || !box) return;
+    const { q, used } = this._suggestQuery(cfg, input.value || '');
+    const pool = cfg.list.filter(v => used.indexOf(v) === -1 && v !== (input.value || '').trim());
+    const res = Utils.fuzzyMatch(pool, q, null, 8);
+    if (!res.length) { box.classList.add('hidden'); return; }
+    box.innerHTML = res.map(v =>
+      `<div class="suggest-item" onmousedown="event.preventDefault();App.pickSuggest('${id}','${encodeURIComponent(v)}')">
+        <span>${Utils.escape(v)}</span>
+        <span class="suggest-del" title="删除记忆" onmousedown="event.preventDefault();event.stopPropagation();App.dropSuggest('${id}','${encodeURIComponent(v)}')">✕</span>
+      </div>`
+    ).join('');
+    box.classList.remove('hidden');
+  },
+
+  blurSuggest(id) { setTimeout(() => this.hideSuggest(id), 150); },
+  hideSuggest(id) { const b = document.getElementById(id + '-suggest'); if (b) b.classList.add('hidden'); },
+
+  pickSuggest(id, encoded) {
+    const val = decodeURIComponent(encoded);
+    const cfg = this._suggest[id];
+    const input = document.getElementById(id);
+    if (!input) return;
+    if (cfg && cfg.multi) {
+      const parts = String(input.value || '').split(/[,，]/);
+      parts[parts.length - 1] = val;
+      input.value = parts.map(s => s.trim()).filter(Boolean).join(',') + ',';
+    } else {
+      input.value = val;
+    }
+    this.hideSuggest(id);
+    input.focus();
+    if (cfg && typeof cfg.onPick === 'function') cfg.onPick(val);
+  },
+
+  dropSuggest(id, encoded) {
+    const val = decodeURIComponent(encoded);
+    const cfg = this._suggest[id];
+    if (!cfg) return;
+    cfg.list = cfg.list.filter(v => v !== val);
+    if (cfg.historyKey) Store.forgetInput(cfg.historyKey, val);
+    this.showSuggest(id);
   },
 
   escape(str) { return Utils.escape(str); },

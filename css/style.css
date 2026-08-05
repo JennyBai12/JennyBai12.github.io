@@ -649,3 +649,101 @@ input[type=radio], input[type=checkbox] { width: auto; margin-right: 6px; }
   .cal-weekview { grid-template-columns: repeat(7, minmax(44px, 1fr)); overflow-x: auto; }
   .cal-wk-item { white-space: normal; }
 }
+
+/* ===== 模糊建议输入框 ===== */
+.suggest-wrap { position: relative; }
+.suggest-box {
+  position: absolute; left: 0; right: 0; top: 100%; z-index: 60;
+  background: #fff; border-radius: 10px; margin-top: 4px; overflow: hidden;
+  box-shadow: 0 6px 20px rgba(0,0,0,0.14); max-height: 220px; overflow-y: auto;
+}
+.suggest-item {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  padding: 9px 12px; font-size: 13px; color: var(--text); cursor: pointer;
+  border-bottom: 1px solid rgba(0,0,0,0.04);
+}
+.suggest-item:last-child { border-bottom: none; }
+.suggest-item:hover { background: rgba(130,158,142,0.12); }
+.suggest-del { color: var(--text-light); font-size: 11px; opacity: .5; padding: 0 2px; }
+.suggest-del:hover { opacity: 1; color: #C08B7D; }
+
+/* ===== 图标选择器（习惯自定义图标） ===== */
+.icon-picker { display: flex; flex-wrap: wrap; gap: 8px; margin: 8px 0; }
+.icon-opt {
+  width: 40px; height: 40px; display: flex; align-items: center; justify-content: center;
+  font-size: 20px; border-radius: 10px; background: rgba(0,0,0,0.04); cursor: pointer;
+  border: 2px solid transparent; transition: all .15s;
+}
+.icon-opt:hover { background: rgba(130,158,142,0.18); }
+.icon-opt.active { border-color: var(--accent); background: rgba(130,158,142,0.22); }
+.color-picker { display: flex; flex-wrap: wrap; gap: 8px; margin: 8px 0; }
+.color-opt { width: 28px; height: 28px; border-radius: 50%; cursor: pointer; border: 2px solid transparent; }
+.color-opt.active { border-color: var(--text); transform: scale(1.12); }
+
+/* ===== 穿搭选择器：分组 + 搜索 ===== */
+.picker-search { margin-bottom: 10px; }
+.picker-group { margin-bottom: 12px; }
+.picker-group-head {
+  display: flex; align-items: center; justify-content: space-between;
+  font-size: 13px; font-weight: 600; color: var(--text);
+  padding: 7px 10px; background: rgba(130,158,142,0.14); border-radius: 8px; cursor: pointer;
+}
+.picker-sub { margin: 8px 0 0 6px; }
+.picker-sub-title { font-size: 12px; color: var(--text-light); margin: 6px 0 4px; }
+.picker-items { display: flex; flex-wrap: wrap; gap: 6px; }
+.picker-chip {
+  display: inline-flex; align-items: center; gap: 6px; padding: 6px 10px;
+  border-radius: 16px; background: #fff; border: 1px solid rgba(0,0,0,0.08);
+  font-size: 12px; cursor: pointer; transition: all .15s;
+}
+.picker-chip:hover { border-color: var(--accent); }
+.picker-chip.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+.picker-chip img { width: 22px; height: 22px; border-radius: 4px; object-fit: cover; }
+.picker-empty { font-size: 12px; color: var(--text-light); padding: 10px; text-align: center; }
+.picker-selected { font-size: 12px; color: var(--text-light); margin-bottom: 8px; }
+
+/* ===== 经期记录 ===== */
+.mens-cal { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; margin-top: 10px; }
+.mens-day {
+  aspect-ratio: 1; display: flex; align-items: center; justify-content: center;
+  font-size: 11px; border-radius: 8px; background: rgba(0,0,0,0.03); color: var(--text-light);
+}
+.mens-day.is-period { background: #E8A7A7; color: #fff; font-weight: 600; }
+.mens-day.is-predict { background: rgba(232,167,167,0.32); color: #A96A6A; }
+.mens-day.is-ovul { background: rgba(150,180,200,0.4); color: #4A6B80; }
+.mens-day.is-today { box-shadow: inset 0 0 0 2px var(--accent); }
+.mens-stat { display: flex; gap: 10px; flex-wrap: wrap; }
+.mens-stat-item { flex: 1; min-width: 90px; background: #fff; border-radius: 10px; padding: 10px; text-align: center; }
+.mens-stat-num { font-size: 18px; font-weight: 700; color: var(--accent); }
+.mens-stat-label { font-size: 11px; color: var(--text-light); margin-top: 2px; }
+
+/* ===== 密码锁 ===== */
+.lock-box { text-align: center; padding: 26px 16px; }
+.lock-icon { font-size: 40px; margin-bottom: 10px; }
+.lock-tip { font-size: 13px; color: var(--text-light); margin-bottom: 14px; }
+.private-mask {
+  filter: blur(5px); user-select: none; pointer-events: none;
+}
+.private-badge { font-size: 11px; color: #C08B7D; }
+
+/* ===== 选择器搜索框 & 建议框补充 ===== */
+.picker-search input {
+  width: 100%; padding: 8px 12px; font-size: 13px;
+  border: 1px solid rgba(0,0,0,0.1); border-radius: 10px; background: #fff;
+}
+.picker-search input:focus { outline: none; border-color: var(--accent); }
+.suggest-box.hidden { display: none; }
+.suggest-wrap input {
+  width: 100%; padding: 9px 12px; font-size: 14px;
+  border: 1px solid #A6B7A1; border-radius: 8px; background: #fff; color: var(--text);
+}
+.suggest-wrap input:focus { outline: none; border-color: var(--accent); }
+#outfit-wardrobe { max-height: 320px; overflow-y: auto; padding-right: 2px; }
+.icon-picker + input {
+  width: 100%; padding: 8px 12px; font-size: 14px;
+  border: 1px solid #A6B7A1; border-radius: 8px;
+}
+.lock-box input {
+  width: 100%; padding: 10px 12px; font-size: 16px;
+  border: 1px solid #A6B7A1; border-radius: 10px;
+}

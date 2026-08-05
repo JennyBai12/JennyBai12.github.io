@@ -1,6 +1,32 @@
 /* ===== 智能衣橱模块 ===== */
 const WardrobeMod = {
   subTab: 'active',
+  _pickerSearch: '',
+  _collapsed: {},
+
+  /* 大类 → 小类 */
+  CAT_MAP: {
+    '上衣':   ['T恤','衬衫','针织衫','卫衣','背心','Polo衫','其他上衣'],
+    '裤装':   ['长裤','短裤','牛仔裤','西裤','运动裤','打底裤','其他裤装'],
+    '裙装':   ['连衣裙','半身裙','短裙','长裙','其他裙装'],
+    '外套':   ['大衣','羽绒服','夹克','西装外套','风衣','棉服','马甲','其他外套'],
+    '鞋':     ['运动鞋','皮鞋','靴子','凉鞋','帆布鞋','高跟鞋','其他鞋'],
+    '包袋':   ['单肩包','双肩包','手提包','斜挎包','钱包','其他包袋'],
+    '配饰':   ['帽子','围巾','腰带','首饰','眼镜','手表','发饰','其他配饰'],
+    '内衣家居': ['内衣','睡衣','家居服','袜子'],
+    '其他':   ['其他'],
+  },
+
+  /* 常见衣物颜色 → RGB，用于照片配色与衣橱衣物匹配 */
+  COLOR_RGB: {
+    '白色': [245,245,245], '米白': [238,232,220], '米色': [225,210,185], '杏色': [230,205,175],
+    '黑色': [28,28,30],   '灰色': [140,140,142], '深灰': [80,80,84],   '浅灰': [200,200,202],
+    '红色': [200,50,50],  '酒红': [125,35,45],   '粉色': [235,165,185], '橘色': [232,140,60],
+    '黄色': [235,205,80], '卡其': [190,165,120], '棕色': [125,90,60],   '咖啡': [95,70,52],
+    '绿色': [80,150,90],  '墨绿': [45,85,60],    '军绿': [110,120,80],  '薄荷绿': [160,205,180],
+    '蓝色': [60,105,190], '深蓝': [35,55,110],   '天蓝': [135,185,225], '牛仔蓝': [85,115,155],
+    '紫色': [140,105,180],'藕粉': [215,180,185], '银色': [200,200,205], '金色': [205,175,105],
+  },
 
   render(c) {
     c.innerHTML = `
@@ -45,17 +71,23 @@ const WardrobeMod = {
     return clothes.map(cl => `
       <div class="card ${cl.annualCount < 1 ? 'idle' : ''}">
         <div class="flex-between">
-          <div class="flex-1">
-            <div class="flex-center gap-8">
-              <span class="text-bold">${Utils.escape(cl.name)}</span>
-              ${cl.annualCount < 1 ? '<span class="secondhand-badge">闲置</span>' : ''}
+          <div class="flex-center gap-12 flex-1" style="min-width:0;">
+            ${cl.image
+              ? `<img class="img-thumb" src="${cl.image}" style="width:56px;height:56px;flex-shrink:0;" onclick="App.openImageViewer('${cl.image}')">`
+              : `<div style="width:56px;height:56px;flex-shrink:0;border-radius:8px;background:rgba(0,0,0,0.05);display:flex;align-items:center;justify-content:center;font-size:22px;">👕</div>`}
+            <div style="min-width:0;">
+              <div class="flex-center gap-8">
+                <span class="text-bold">${Utils.escape(cl.name)}</span>
+                ${cl.annualCount < 1 ? '<span class="secondhand-badge">闲置</span>' : ''}
+              </div>
+              <div class="text-sm text-light mt-8">${Utils.escape(cl.category)}${cl.subCategory ? ' / ' + Utils.escape(cl.subCategory) : ''} · ${Utils.escape(cl.color)} · ${Utils.escape(cl.season)} · ¥${cl.price}</div>
+              <div class="text-sm text-light">年度使用 ${cl.annualCount}次 · 累计 ${cl.totalCount}次</div>
             </div>
-            <div class="text-sm text-light mt-8">${Utils.escape(cl.category)} · ${Utils.escape(cl.color)} · ${Utils.escape(cl.season)} · ¥${cl.price}</div>
-            <div class="text-sm text-light">年度使用 ${cl.annualCount}次 · 累计 ${cl.totalCount}次</div>
           </div>
-          <div class="flex gap-8">
+          <div class="flex gap-8" style="flex-shrink:0;flex-wrap:wrap;justify-content:flex-end;">
             <button class="btn btn-outline btn-sm" onclick="WardrobeMod.wear(${cl.id})">穿搭+1</button>
-            <button class="btn btn-outline btn-sm" onclick="WardrobeMod.sellSecondhand(${cl.id})">二手处理</button>
+            <button class="btn btn-outline btn-sm" onclick="WardrobeMod.editCloth(${cl.id})">✏️</button>
+            <button class="btn btn-outline btn-sm" onclick="WardrobeMod.sellSecondhand(${cl.id})">二手</button>
             <button class="btn btn-cancel btn-sm" onclick="WardrobeMod.del(${cl.id})">✕</button>
           </div>
         </div>
@@ -71,35 +103,130 @@ const WardrobeMod = {
   },
 
   add() {
-    App.openModal(`
-      <div class="modal-title">添加衣物</div>
-      <div class="form-group"><label class="form-label">名称 <span class="req">*</span></label><input type="text" id="cl-name"></div>
-      <div class="two-col">
-        <div class="form-group"><label class="form-label">分类</label><select id="cl-category"><option>上衣</option><option>裤装</option><option>外套</option><option>裙装</option><option>鞋</option><option>配饰</option></select></div>
-        <div class="form-group"><label class="form-label">颜色</label><input type="text" id="cl-color"></div>
-      </div>
-      <div class="two-col">
-        <div class="form-group"><label class="form-label">季节</label><select id="cl-season"><option>春</option><option>夏</option><option>秋</option><option>冬</option><option>四季</option></select></div>
-        <div class="form-group"><label class="form-label">购入价格</label><input type="number" id="cl-price" value="0"></div>
-      </div>
-      <div class="form-group"><label class="form-label">购买日期</label><input type="date" id="cl-date" value="${Utils.today()}"></div>
-      <div class="modal-actions"><button class="btn-cancel" onclick="App.closeModal()">${I18n.t('cancel')}</button><button class="btn-confirm" onclick="WardrobeMod.save()">${I18n.t('save')}</button></div>
-    `);
+    this._clImage = '';
+    App.openModal(this.clothForm(null));
   },
 
-  save() {
+  editCloth(id) {
+    const cl = Store.find('clothes', c => c.id === id);
+    if (!cl) return;
+    this._clImage = cl.image || '';
+    App.openModal(this.clothForm(cl));
+  },
+
+  clothForm(cl) {
+    const isEdit = !!cl;
+    const cats = Object.keys(this.CAT_MAP);
+    const curCat = isEdit ? (cl.category || cats[0]) : cats[0];
+    const seasons = ['春','夏','秋','冬','四季'];
+    return `
+      <div class="modal-title">${isEdit ? '✏️ 修改衣物' : '添加衣物'}</div>
+      <div class="form-group">
+        <label class="form-label">📷 衣物照片</label>
+        <div class="img-upload-area" onclick="WardrobeMod.uploadClothImg()">拍照 / 上传衣物照片（自动识别主色）</div>
+        <div id="cl-img-box">${this._clImage ? `<div class="img-grid"><div class="img-thumb-wrap"><img class="img-thumb" src="${this._clImage}"><button class="img-thumb-del" onclick="WardrobeMod.removeClothImg()">✕</button></div></div>` : ''}</div>
+        <div id="cl-img-ai"></div>
+      </div>
+      <div class="form-group"><label class="form-label">名称 <span class="req">*</span></label><input type="text" id="cl-name" value="${isEdit ? Utils.escape(cl.name || '') : ''}"></div>
+      <div class="two-col">
+        <div class="form-group"><label class="form-label">大类</label><select id="cl-category" onchange="WardrobeMod.syncSubCat()">${cats.map(c => `<option${c === curCat ? ' selected' : ''}>${c}</option>`).join('')}</select></div>
+        <div class="form-group"><label class="form-label">小类</label><select id="cl-subcat">${(this.CAT_MAP[curCat] || []).map(s => `<option${isEdit && cl.subCategory === s ? ' selected' : ''}>${s}</option>`).join('')}</select></div>
+      </div>
+      <div class="two-col">
+        <div class="form-group"><label class="form-label">颜色</label><input type="text" id="cl-color" list="cl-color-list" value="${isEdit ? Utils.escape(cl.color || '') : ''}" placeholder="如：白色"><datalist id="cl-color-list">${Object.keys(this.COLOR_RGB).map(c => `<option value="${c}">`).join('')}</datalist></div>
+        <div class="form-group"><label class="form-label">季节</label><select id="cl-season">${seasons.map(s => `<option${isEdit && cl.season === s ? ' selected' : ''}>${s}</option>`).join('')}</select></div>
+      </div>
+      <div class="two-col">
+        <div class="form-group"><label class="form-label">购入价格</label><input type="number" id="cl-price" value="${isEdit ? (cl.price || 0) : 0}"></div>
+        <div class="form-group"><label class="form-label">购买日期</label><input type="date" id="cl-date" value="${isEdit ? (cl.purchaseDate || Utils.today()) : Utils.today()}"></div>
+      </div>
+      <div class="modal-actions">
+        <button class="btn-cancel" onclick="App.closeModal()">${I18n.t('cancel')}</button>
+        <button class="btn-confirm" onclick="WardrobeMod.save(${isEdit ? cl.id : 'null'})">${I18n.t('save')}</button>
+      </div>`;
+  },
+
+  syncSubCat() {
+    const cat = document.getElementById('cl-category').value;
+    const sel = document.getElementById('cl-subcat');
+    if (sel) sel.innerHTML = (this.CAT_MAP[cat] || ['其他']).map(s => `<option>${s}</option>`).join('');
+  },
+
+  uploadClothImg() {
+    const input = document.createElement('input');
+    input.type = 'file'; input.accept = 'image/*';
+    input.onchange = () => {
+      const f = input.files[0];
+      if (!f) return;
+      Utils.readFileAsDataURL(f, async (url) => {
+        WardrobeMod._clImage = url;
+        const box = document.getElementById('cl-img-box');
+        if (box) box.innerHTML = `<div class="img-grid"><div class="img-thumb-wrap"><img class="img-thumb" src="${url}"><button class="img-thumb-del" onclick="WardrobeMod.removeClothImg()">✕</button></div></div>`;
+        const ai = document.getElementById('cl-img-ai');
+        if (ai) ai.innerHTML = '<div class="ocr-loading"><div class="ocr-spinner"></div>识别衣物主色…</div>';
+        try {
+          const a = await Utils.analyzeImage(url, { clothing: true });
+          const named = WardrobeMod.nearestColorName(a.topColor);
+          const colorInput = document.getElementById('cl-color');
+          if (colorInput && !colorInput.value.trim()) colorInput.value = named;
+          if (ai) ai.innerHTML = `<div class="ai-report"><div class="ai-report-body">
+            <div>识别主色：<span class="color-swatch" style="background:${Utils.hexOf(a.topColor)};vertical-align:middle;"></span> ${named}（${Utils.hexOf(a.topColor)}）</div>
+            ${Utils.paletteHTML(a)}
+            <div class="text-sm text-light">已自动填入颜色，可手动修改</div>
+          </div></div>`;
+        } catch (e) { if (ai) ai.innerHTML = ''; }
+      });
+    };
+    input.click();
+  },
+
+  removeClothImg() {
+    this._clImage = '';
+    const box = document.getElementById('cl-img-box');
+    if (box) box.innerHTML = '';
+    const ai = document.getElementById('cl-img-ai');
+    if (ai) ai.innerHTML = '';
+  },
+
+  /* 把 RGB 匹配到最接近的颜色名 */
+  nearestColorName(c) {
+    if (!c) return '';
+    let best = '', bestD = Infinity;
+    for (const name in this.COLOR_RGB) {
+      const [r, g, b] = this.COLOR_RGB[name];
+      const d = (r - c.r) ** 2 + (g - c.g) ** 2 + (b - c.b) ** 2;
+      if (d < bestD) { bestD = d; best = name; }
+    }
+    return best;
+  },
+
+  save(id) {
     const name = document.getElementById('cl-name').value.trim();
     if (!name) { App.showToast(I18n.t('fillRequired'), 'error'); return; }
-    Store.add('clothes', {
-      name, category: document.getElementById('cl-category').value,
+    const base = {
+      name,
+      category: document.getElementById('cl-category').value,
+      subCategory: (document.getElementById('cl-subcat') || {}).value || '',
       color: document.getElementById('cl-color').value,
       season: document.getElementById('cl-season').value,
       price: +document.getElementById('cl-price').value,
-      image: '', purchaseDate: document.getElementById('cl-date').value,
-      annualCount: 0, totalCount: 0,
-      isSecondhand: false, secondhandPrice: 0, secondhandDate: '', archived: false
-    });
-    App.closeModal(); App.showToast(I18n.t('added'), 'success'); App.render();
+      image: this._clImage || '',
+      purchaseDate: document.getElementById('cl-date').value,
+    };
+    if (id) {
+      Store.update('clothes', id, base);
+      Store.logChange('wardrobe', '修改', id, '修改衣物: ' + name);
+      App.showToast(I18n.t('saved') || '已保存', 'success');
+    } else {
+      Store.add('clothes', Object.assign(base, {
+        annualCount: 0, totalCount: 0,
+        isSecondhand: false, secondhandPrice: 0, secondhandDate: '', archived: false
+      }));
+      Store.logChange('wardrobe', '新增', 0, '新增衣物: ' + name);
+      App.showToast(I18n.t('added'), 'success');
+    }
+    this._clImage = '';
+    App.closeModal(); App.render();
   },
 
   ocrAdd() {
@@ -138,15 +265,18 @@ const WardrobeMod = {
       <div class="text-sm text-accent text-bold mt-12">✅ 已自动解析，可修改校正：</div>
       <div class="form-group mt-8"><label class="form-label">名称</label><input type="text" id="cl-name" value="${Utils.escape(r.name || '')}"></div>
       <div class="two-col">
-        <div class="form-group"><label class="form-label">分类</label><select id="cl-category"><option>上衣</option><option>裤装</option><option>外套</option><option>裙装</option><option>鞋</option><option>配饰</option><option>其他</option></select></div>
-        <div class="form-group"><label class="form-label">颜色</label><input type="text" id="cl-color" value=""></div>
+        <div class="form-group"><label class="form-label">大类</label><select id="cl-category" onchange="WardrobeMod.syncSubCat()">${Object.keys(this.CAT_MAP).map(c => `<option>${c}</option>`).join('')}</select></div>
+        <div class="form-group"><label class="form-label">小类</label><select id="cl-subcat">${this.CAT_MAP['上衣'].map(s => `<option>${s}</option>`).join('')}</select></div>
       </div>
       <div class="two-col">
+        <div class="form-group"><label class="form-label">颜色</label><input type="text" id="cl-color" value=""></div>
         <div class="form-group"><label class="form-label">价格</label><input type="number" id="cl-price" value="${r.totalPrice || ''}"></div>
-        <div class="form-group"><label class="form-label">季节</label><select id="cl-season"><option>春</option><option>夏</option><option>秋</option><option>冬</option><option>四季</option></select></div>
       </div>
-      <div class="form-group"><label class="form-label">购买日期</label><input type="date" id="cl-date" value="${r.buyDate || Utils.today()}"></div>
-      <div class="modal-actions"><button class="btn-cancel" onclick="App.closeModal()">${I18n.t('cancel')}</button><button class="btn-confirm" onclick="WardrobeMod.save()">确认保存</button></div>
+      <div class="two-col">
+        <div class="form-group"><label class="form-label">季节</label><select id="cl-season"><option>春</option><option>夏</option><option>秋</option><option>冬</option><option>四季</option></select></div>
+        <div class="form-group"><label class="form-label">购买日期</label><input type="date" id="cl-date" value="${r.buyDate || Utils.today()}"></div>
+      </div>
+      <div class="modal-actions"><button class="btn-cancel" onclick="App.closeModal()">${I18n.t('cancel')}</button><button class="btn-confirm" onclick="WardrobeMod.save(null)">确认保存</button></div>
     `;
   },
 
@@ -213,7 +343,7 @@ const WardrobeMod = {
         <div class="subsection-title" style="margin:0;">穿搭打卡 (${outfits.length})</div>
         <button class="btn btn-primary btn-sm" onclick="WardrobeMod.addOutfit()">➕ 打卡</button>
       </div>
-      <div class="card"><div class="text-sm text-light">拍照打卡，AI 分析真实配色；勾选衣橱衣物自动累计穿着次数。</div></div>
+      <div class="card"><div class="text-sm text-light">拍照打卡，AI 识别照片配色并自动推测衣橱单品；按大类/小类勾选或模糊搜索，自动累计穿着次数。</div></div>
       ${outfits.map(o => {
         let clothes = [];
         try { clothes = (o.matchedClothes || []).map(id => Store.find('clothes', c => c.id === id)).filter(Boolean); } catch (e) {}
@@ -235,6 +365,7 @@ const WardrobeMod = {
     this._outfitImages = [];
     this._outfitAnalysis = null;
     this._outfitClothes = [];
+    this._pickerSearch = '';
     App.openModal(`
       <div class="modal-title">➕ 穿搭打卡</div>
       <div class="form-group"><label class="form-label">📷 上传今日穿搭照片</label>
@@ -242,7 +373,7 @@ const WardrobeMod = {
         <div id="outfit-imgs"></div>
       </div>
       <div id="outfit-ai-area"></div>
-      <div class="form-group"><label class="form-label">选择今日穿着（从衣橱勾选，自动累计次数）</label><div id="outfit-wardrobe"></div></div>
+      <div class="form-group"><label class="form-label">选择今日穿着（按大类/小类，支持模糊搜索）</label><div id="outfit-wardrobe"></div></div>
       <div class="form-group"><label class="form-label">备注</label><textarea id="outfit-note" rows="2" placeholder="如：通勤、约会、运动"></textarea></div>
       <div class="modal-actions"><button class="btn-cancel" onclick="App.closeModal()">${I18n.t('cancel')}</button><button class="btn-confirm" onclick="WardrobeMod.saveOutfit()">保存打卡</button></div>
     `);
@@ -264,37 +395,167 @@ const WardrobeMod = {
     input.click();
   },
 
+  /* 当前季节（用于穿搭匹配加权） */
+  curSeason() {
+    const m = new Date().getMonth() + 1;
+    if (m >= 3 && m <= 5) return '春';
+    if (m >= 6 && m <= 8) return '夏';
+    if (m >= 9 && m <= 11) return '秋';
+    return '冬';
+  },
+
+  /* 根据照片配色 + 季节，推测衣橱中今天可能穿的衣物 */
+  matchClothesByPhoto(analysis) {
+    const clothes = Store.filter('clothes', c => !c.archived && !c.isSecondhand);
+    if (!clothes.length || !analysis || !analysis.dominant || !analysis.dominant.length) return [];
+    const season = this.curSeason();
+    const results = clothes.map(cl => {
+      const rgb = this.COLOR_RGB[cl.color] || null;
+      let colorScore = 0, matchedRatio = 0;
+      if (rgb) {
+        analysis.dominant.forEach(d => {
+          const dist = Math.sqrt((rgb[0] - d.r) ** 2 + (rgb[1] - d.g) ** 2 + (rgb[2] - d.b) ** 2);
+          // 距离 0~441，转成 0~1 的相似度
+          const sim = Math.max(0, 1 - dist / 190);
+          const s = sim * (0.4 + d.ratio);      // 占比越大权重越高
+          if (s > colorScore) { colorScore = s; matchedRatio = d.ratio; }
+        });
+      }
+      let score = colorScore * 100;
+      if (cl.season === season || cl.season === '四季') score += 12;
+      else score -= 10;
+      if (cl.annualCount > 0) score += Math.min(8, cl.annualCount);  // 常穿的更可能
+      return { cl, score: Math.round(score), ratio: matchedRatio };
+    }).filter(x => x.score >= 32).sort((a, b) => b.score - a.score).slice(0, 6);
+    return results;
+  },
+
   async runOutfitAI() {
     if (!this._outfitImages.length) return;
     const area = document.getElementById('outfit-ai-area');
     if (!area) return;
-    area.innerHTML = '<div class="ocr-loading"><div class="ocr-spinner"></div>AI 分析今日穿搭配色...</div>';
+    area.innerHTML = '<div class="ocr-loading"><div class="ocr-spinner"></div>AI 识别今日穿搭…</div>';
     try {
       const a = await Utils.analyzeImage(this._outfitImages[this._outfitImages.length - 1], { clothing: true });
       this._outfitAnalysis = a;
-      area.innerHTML = `<div class="ai-report"><div class="ai-report-title">🎨 AI 配色分析（基于实际照片像素）</div><div class="ai-report-body">
-        <div>主色调：<span class="color-swatch" style="background:${Utils.hexOf(a.topColor)};vertical-align:middle;"></span> ${Utils.hexOf(a.topColor)}</div>
-        <div class="mt-8">整体亮度：${a.brightness}/100 · 对比度：${a.contrast}/100</div>
+      const guesses = this.matchClothesByPhoto(a);
+      const mainName = this.nearestColorName(a.topColor);
+      const styleTip = a.brightness > 68 ? '整体明亮清爽，适合日常通勤/出街'
+        : a.brightness < 38 ? '整体偏暗沉稳，适合正式场合'
+        : '明暗均衡，百搭日常';
+      const contrastTip = a.contrast > 32 ? '配色对比强烈，视觉层次分明' : '配色柔和统一，整体协调';
+      area.innerHTML = `<div class="ai-report"><div class="ai-report-title">🎨 AI 穿搭识别（基于实际照片像素）</div><div class="ai-report-body">
+        <div>主色调：<span class="color-swatch" style="background:${Utils.hexOf(a.topColor)};vertical-align:middle;"></span> ${mainName}（${Utils.hexOf(a.topColor)}）</div>
         <div class="mt-8">配色构成：</div>${Utils.paletteHTML(a)}
-        <div class="text-sm text-light mt-8">以上为照片真实像素分析；衣物项请手动勾选以记录穿着。</div>
+        <div class="mt-8 text-sm">整体亮度 ${a.brightness}/100 · 对比度 ${a.contrast}/100</div>
+        <div class="text-sm">${styleTip}；${contrastTip}。</div>
+        ${guesses.length ? `
+          <div class="divider" style="margin:8px 0;"></div>
+          <div class="text-bold text-sm mb-8">👗 疑似识别到你衣橱中的这些单品（点击即勾选）：</div>
+          <div class="picker-items">
+            ${guesses.map(g => `<span class="picker-chip" id="guess-${g.cl.id}" onclick="WardrobeMod.pickGuess(${g.cl.id})">
+              ${g.cl.image ? `<img src="${g.cl.image}">` : ''}${Utils.escape(g.cl.name)}
+              <span style="opacity:.6;font-size:11px;">${g.score}%</span>
+            </span>`).join('')}
+          </div>
+          <div class="text-sm text-light mt-8">匹配依据：照片主色与衣物登记颜色的接近度 + 当季适配度。识别仅供参考，请核对后勾选。</div>
+        ` : '<div class="text-sm text-light mt-8">未能匹配到衣橱单品（可为衣物补充「颜色」与照片以提升识别率）。</div>'}
       </div></div>`;
     } catch (e) {
       area.innerHTML = '<div class="ocr-result">配色分析失败，可继续手动勾选保存。</div>';
     }
   },
 
+  pickGuess(id) {
+    if (!this._outfitClothes.includes(id)) this._outfitClothes.push(id);
+    const chip = document.getElementById('guess-' + id);
+    if (chip) chip.classList.add('active');
+    this.renderOutfitPicker();
+    App.showToast('已加入今日穿着', 'success');
+  },
+
+  /* ===== 今日穿着选择器：大类 → 小类 + 模糊搜索 ===== */
   renderOutfitPicker() {
     const el = document.getElementById('outfit-wardrobe');
     if (!el) return;
-    const clothes = Store.filter('clothes', c => !c.archived && !c.isSecondhand);
-    el.innerHTML = clothes.length
-      ? clothes.map(c => `<label class="check-pill"><input type="checkbox" value="${c.id}" onchange="WardrobeMod.toggleOutfitCloth(this,${c.id})"> ${Utils.escape(c.name)}</label>`).join('')
-      : '<div class="text-sm text-light">衣橱暂无衣物，可先去「我的衣橱」添加</div>';
+    const all = Store.filter('clothes', c => !c.archived && !c.isSecondhand);
+    const kw = (this._pickerSearch || '').trim();
+    const selected = this._outfitClothes || [];
+
+    let list = all;
+    if (kw) {
+      list = all.filter(c => Utils.fuzzyHit(kw, [c.name, c.category, c.subCategory, c.color, c.season].join(' ')));
+    }
+
+    // 按大类 → 小类分组
+    const groups = {};
+    list.forEach(c => {
+      const cat = c.category || '其他';
+      const sub = c.subCategory || '未分类';
+      groups[cat] = groups[cat] || {};
+      groups[cat][sub] = groups[cat][sub] || [];
+      groups[cat][sub].push(c);
+    });
+    const catOrder = Object.keys(this.CAT_MAP).filter(c => groups[c]).concat(Object.keys(groups).filter(c => !this.CAT_MAP[c]));
+
+    const selNames = selected.map(id => { const c = all.find(x => x.id === id); return c ? c.name : ''; }).filter(Boolean);
+
+    el.innerHTML = `
+      <div class="picker-search">
+        <input type="text" id="picker-kw" placeholder="🔍 模糊搜索：名称/颜色/类别/季节" value="${Utils.escape(kw)}"
+          oninput="WardrobeMod._pickerSearch=this.value;WardrobeMod.renderOutfitPicker();WardrobeMod._focusPicker();">
+      </div>
+      <div class="picker-selected">已选 ${selected.length} 件${selNames.length ? '：' + Utils.escape(selNames.join('、')) : ''}
+        ${selected.length ? ` <span style="color:#C08B7D;cursor:pointer;" onclick="WardrobeMod.clearOutfitPick()">清空</span>` : ''}
+      </div>
+      ${all.length === 0 ? '<div class="picker-empty">衣橱暂无衣物，可先去「我的衣橱」添加</div>'
+        : catOrder.length === 0 ? '<div class="picker-empty">没有匹配的衣物，换个关键词试试</div>'
+        : catOrder.map(cat => {
+          const subs = groups[cat];
+          const total = Object.values(subs).reduce((s, arr) => s + arr.length, 0);
+          const collapsed = !kw && this._collapsed[cat];
+          return `
+            <div class="picker-group">
+              <div class="picker-group-head" onclick="WardrobeMod.toggleGroup('${cat}')">
+                <span>${cat} <span style="opacity:.6;font-weight:400;">(${total})</span></span>
+                <span>${collapsed ? '▸' : '▾'}</span>
+              </div>
+              ${collapsed ? '' : Object.keys(subs).map(sub => `
+                <div class="picker-sub">
+                  <div class="picker-sub-title">${Utils.escape(sub)}</div>
+                  <div class="picker-items">
+                    ${subs[sub].map(c => `
+                      <span class="picker-chip${selected.includes(c.id) ? ' active' : ''}" onclick="WardrobeMod.toggleOutfitCloth(${c.id})">
+                        ${c.image ? `<img src="${c.image}">` : ''}${Utils.escape(c.name)}
+                        <span style="opacity:.55;font-size:11px;">${Utils.escape(c.color || '')}</span>
+                      </span>`).join('')}
+                  </div>
+                </div>`).join('')}
+            </div>`;
+        }).join('')}
+    `;
   },
 
-  toggleOutfitCloth(box, id) {
-    if (box.checked) { if (!this._outfitClothes.includes(id)) this._outfitClothes.push(id); }
-    else { this._outfitClothes = this._outfitClothes.filter(x => x !== id); }
+  _focusPicker() {
+    const i = document.getElementById('picker-kw');
+    if (i) { i.focus(); const v = i.value; i.value = ''; i.value = v; }
+  },
+
+  toggleGroup(cat) {
+    this._collapsed[cat] = !this._collapsed[cat];
+    this.renderOutfitPicker();
+  },
+
+  clearOutfitPick() {
+    this._outfitClothes = [];
+    this.renderOutfitPicker();
+  },
+
+  toggleOutfitCloth(id) {
+    this._outfitClothes = this._outfitClothes || [];
+    if (this._outfitClothes.includes(id)) this._outfitClothes = this._outfitClothes.filter(x => x !== id);
+    else this._outfitClothes.push(id);
+    this.renderOutfitPicker();
   },
 
   saveOutfit() {

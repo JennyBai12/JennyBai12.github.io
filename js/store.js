@@ -97,12 +97,12 @@ const Store = {
       { id:2, mood:'😴', content:'有点累，但坚持读了一个小时书。', tags:'阅读', date:'2026-08-02', images:[], isPrivate:false },
       { id:3, mood:'🤔', content:'思考未来三个月的学习方向。', tags:'思考,计划', date:'2026-08-03', images:[], isPrivate:true },
     ]},
-    clothes: { fields: ['name','category','color','season','price','image','purchaseDate','annualCount','totalCount','isSecondhand','secondhandPrice','secondhandDate','archived'], seed: [
-      { id:1, name:'白色T恤', category:'上衣', color:'白色', season:'夏', price:99, image:'', purchaseDate:'2026-05-01', annualCount:12, totalCount:30, isSecondhand:false, secondhandPrice:0, secondhandDate:'', archived:false },
-      { id:2, name:'牛仔裤', category:'裤装', color:'蓝色', season:'四季', price:299, image:'', purchaseDate:'2026-03-15', annualCount:8, totalCount:20, isSecondhand:false, secondhandPrice:0, secondhandDate:'', archived:false },
-      { id:3, name:'冬季羽绒服', category:'外套', color:'黑色', season:'冬', price:899, image:'', purchaseDate:'2025-12-01', annualCount:0, totalCount:5, isSecondhand:false, secondhandPrice:0, secondhandDate:'', archived:false },
+    clothes: { fields: ['name','category','subCategory','color','season','price','image','purchaseDate','annualCount','totalCount','isSecondhand','secondhandPrice','secondhandDate','archived'], seed: [
+      { id:1, name:'白色T恤', category:'上衣', subCategory:'T恤', color:'白色', season:'夏', price:99, image:'', purchaseDate:'2026-05-01', annualCount:12, totalCount:30, isSecondhand:false, secondhandPrice:0, secondhandDate:'', archived:false },
+      { id:2, name:'牛仔裤', category:'裤装', subCategory:'长裤', color:'蓝色', season:'四季', price:299, image:'', purchaseDate:'2026-03-15', annualCount:8, totalCount:20, isSecondhand:false, secondhandPrice:0, secondhandDate:'', archived:false },
+      { id:3, name:'冬季羽绒服', category:'外套', subCategory:'羽绒服', color:'黑色', season:'冬', price:899, image:'', purchaseDate:'2025-12-01', annualCount:0, totalCount:5, isSecondhand:false, secondhandPrice:0, secondhandDate:'', archived:false },
     ]},
-    outfits: { fields: ['date','images','matchedClothes','note'], seed: [] },
+    outfits: { fields: ['date','images','matchedClothes','note','analysis'], seed: [] },
     goods_c1: { fields: ['name','classify','buyDate','expireDate','totalPrice','stock','remark','image','archived'], seed: [
       { id:1, name:'抽纸', classify:'纸巾', buyDate:'2026-07-01', expireDate:'2026-10-01', totalPrice:45, stock:8, remark:'整箱采购', image:'', archived:false },
       { id:2, name:'垃圾袋', classify:'清洁', buyDate:'2026-06-15', expireDate:'2026-12-15', totalPrice:25, stock:3, remark:'', image:'', archived:false },
@@ -183,6 +183,27 @@ const Store = {
       { id:3, name:'元旦', date:'2027-01-01', days:3, type:'法定' },
     ]},
     change_logs: { fields: ['module','action','entityId','summary','timestamp'], seed: [] },
+    /* ===== 通用输入历史记忆（影院 / 日记标签 / 影音标签等，供模糊建议使用） ===== */
+    input_history: { fields: ['key','value','count','lastUsed'], seed: [
+      { id:1, key:'cinema', value:'万达影城IMAX厅', count:1, lastUsed:'2026-07-20' },
+      { id:2, key:'diaryTags', value:'工作', count:1, lastUsed:'2026-08-01' },
+      { id:3, key:'diaryTags', value:'成就感', count:1, lastUsed:'2026-08-01' },
+      { id:4, key:'diaryTags', value:'阅读', count:1, lastUsed:'2026-08-02' },
+      { id:5, key:'diaryTags', value:'思考', count:1, lastUsed:'2026-08-03' },
+      { id:6, key:'diaryTags', value:'计划', count:1, lastUsed:'2026-08-03' },
+    ]},
+    /* ===== 经期记录 ===== */
+    menstrual_records: { fields: ['startDate','endDate','flow','pain','symptoms','mood','note'], seed: [
+      { id:1, startDate:'2026-06-08', endDate:'2026-06-13', flow:'中', pain:'轻微', symptoms:'腰酸', mood:'😴', note:'' },
+      { id:2, startDate:'2026-07-06', endDate:'2026-07-11', flow:'中', pain:'无', symptoms:'', mood:'😊', note:'' },
+      { id:3, startDate:'2026-08-03', endDate:'', flow:'多', pain:'明显', symptoms:'腹痛,乏力', mood:'😖', note:'注意保暖' },
+    ]},
+    /* ===== 应用设置（日记密码等） ===== */
+    app_settings: { fields: ['key','value'], seed: [
+      { id:1, key:'diaryPassword', value:'' },
+    ]},
+    /* ===== 热点资讯抓取源（RSS/Atom） ===== */
+    news_sources: { fields: ['name','url','contentCat','sourceCat','enabled'], seed: [] },
   },
 
   init() {
@@ -218,6 +239,63 @@ const Store = {
   },
   find(table, fn) { return this.get(table).find(fn); },
   filter(table, fn) { return this.get(table).filter(fn); },
+
+  /* ===== 通用输入历史记忆 =====
+   * key: 'cinema' | 'diaryTags' | 'mediaTags' | ...
+   * values: 字符串或字符串数组，自动去重、累加使用次数 */
+  rememberInput(key, values) {
+    if (!key || !values) return;
+    const arr = Array.isArray(values) ? values : String(values).split(/[,，]/);
+    const list = this.get('input_history');
+    const today = (typeof Utils !== 'undefined' && Utils.today) ? Utils.today() : new Date().toISOString().slice(0, 10);
+    let changed = false;
+    arr.forEach(raw => {
+      const v = String(raw == null ? '' : raw).trim();
+      if (!v || v.length > 40) return;
+      const hit = list.find(h => h.key === key && h.value === v);
+      if (hit) { hit.count = (hit.count || 0) + 1; hit.lastUsed = today; }
+      else {
+        list.push({ id: list.length > 0 ? Math.max(...list.map(d => d.id)) + 1 : 1, key, value: v, count: 1, lastUsed: today });
+      }
+      changed = true;
+    });
+    /* 单个 key 最多保留 80 条，按使用次数+时间淘汰 */
+    const same = list.filter(h => h.key === key);
+    if (same.length > 80) {
+      same.sort((a, b) => (b.count - a.count) || String(b.lastUsed).localeCompare(String(a.lastUsed)));
+      const keep = new Set(same.slice(0, 80).map(h => h.id));
+      const next = list.filter(h => h.key !== key || keep.has(h.id));
+      this.save('input_history', next);
+      return;
+    }
+    if (changed) this.save('input_history', list);
+  },
+
+  /* 取出某个 key 的历史值数组（按热度排序） */
+  historyOf(key) {
+    return this.get('input_history')
+      .filter(h => h.key === key && h.value)
+      .sort((a, b) => (b.count - a.count) || String(b.lastUsed).localeCompare(String(a.lastUsed)))
+      .map(h => h.value);
+  },
+
+  forgetInput(key, value) {
+    const list = this.get('input_history').filter(h => !(h.key === key && h.value === value));
+    this.save('input_history', list);
+  },
+
+  /* ===== 应用设置读写 ===== */
+  getSetting(key, def) {
+    const row = this.get('app_settings').find(s => s.key === key);
+    return row ? row.value : (def === undefined ? '' : def);
+  },
+  setSetting(key, value) {
+    const list = this.get('app_settings');
+    const row = list.find(s => s.key === key);
+    if (row) row.value = value;
+    else list.push({ id: list.length > 0 ? Math.max(...list.map(d => d.id)) + 1 : 1, key, value });
+    this.save('app_settings', list);
+  },
   notifyCloud() {
     if (typeof Cloud !== 'undefined' && Cloud.client && Cloud.loggedIn) {
       Cloud.notifyChange();

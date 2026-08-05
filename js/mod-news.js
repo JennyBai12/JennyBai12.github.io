@@ -28,6 +28,16 @@ const NewsMod = {
 
   setSub(tab) { this.subTab = tab; App.render(); },
 
+  lastCrawlText() {
+    const t = +(localStorage.getItem(this.LAST_CRAWL_KEY) || 0);
+    if (!t) return '尚未抓取';
+    const diff = Date.now() - t;
+    if (diff < 60000) return '刚刚';
+    if (diff < 3600000) return Math.floor(diff / 60000) + ' 分钟前';
+    if (diff < 86400000) return Math.floor(diff / 3600000) + ' 小时前';
+    return new Date(t).toLocaleString('zh-CN', { hour12: false }).slice(0, 16);
+  },
+
   /* ===== 资讯流 ===== */
   renderFeed() {
     const allData = Store.get('hotspot_data');
@@ -44,10 +54,13 @@ const NewsMod = {
     document.getElementById('news-sub').innerHTML = `
       <div class="card mb-12">
         <div class="flex-between mb-8">
-          <div class="text-sm text-light">🔄 每2小时自动增量抓取 · 标题/URL双重去重 · 失败自动重试</div>
-          <button class="btn btn-outline btn-sm" onclick="NewsMod.simulateCrawl()">⚡ 手动抓取</button>
+          <div class="text-sm text-light">🔄 每2小时自动增量抓取 · 标题/URL双重去重 · 多代理容错</div>
+          <div class="flex gap-8">
+            <button class="btn btn-outline btn-sm" onclick="NewsMod.manageSources()">📡 抓取源</button>
+            <button class="btn btn-primary btn-sm" onclick="NewsMod.manualCrawl()">⚡ 手动抓取</button>
+          </div>
         </div>
-        <div class="text-sm text-light">当前共 ${allData.length} 条资讯 · ${batches.length} 个抓取批次</div>
+        <div class="text-sm text-light">当前共 ${allData.length} 条资讯 · ${batches.length} 个抓取批次 · 上次抓取：${this.lastCrawlText()}</div>
       </div>
 
       <div class="card mb-12">
@@ -376,37 +389,319 @@ const NewsMod = {
     App.render();
   },
 
-  /* ===== 模拟抓取 ===== */
-  simulateCrawl() {
+  /* ===================== 真实 RSS 抓取 ===================== */
+
+  /* 内置抓取源（可在「抓取源」中增删） */
+  DEFAULT_SOURCES: [
+    { name: '36氪',     url: 'https://36kr.com/feed',                          contentCat: '科技',     sourceCat: '行业垂直媒体', enabled: true },
+    { name: 'IT之家',   url: 'https://www.ithome.com/rss/',                    contentCat: '科技',     sourceCat: '行业垂直媒体', enabled: true },
+    { name: '少数派',   url: 'https://sspai.com/feed',                         contentCat: '生活',     sourceCat: '行业垂直媒体', enabled: true },
+    { name: '虎嗅网',   url: 'https://www.huxiu.com/rss/0.xml',                contentCat: '财经',     sourceCat: '行业垂直媒体', enabled: true },
+    { name: '人民网',   url: 'http://www.people.com.cn/rss/politics.xml',      contentCat: '综合新闻', sourceCat: '权威新闻平台', enabled: true },
+    { name: '新浪新闻', url: 'https://rss.sina.com.cn/news/china/focus15.xml', contentCat: '社会',     sourceCat: '权威新闻平台', enabled: true },
+  ],
+
+  CRAWL_INTERVAL_MS: 2 * 60 * 60 * 1000,   // 2 小时
+  LAST_CRAWL_KEY: 'bb_news_last_crawl',
+
+  sources() {
+    const custom = Store.get('news_sources');
+    if (!custom.length) {
+      // 首次使用，将内置源写入表中，便于用户管理
+      this.DEFAULT_SOURCES.forEach(s => Store.add('news_sources', s));
+      return Store.get('news_sources');
+    }
+    return custom;
+  },
+
+  /* 带超时的 fetch */
+  _fetchText(url, timeout = 12000) {
+    return new Promise((resolve, reject) => {
+      const ctrl = typeof AbortController !== 'undefined' ? new AbortController() : null;
+      const timer = setTimeout(() => { if (ctrl) ctrl.abort(); reject(new Error('timeout')); }, timeout);
+      fetch(url, ctrl ? { signal: ctrl.signal } : {})
+        .then(r => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.text(); })
+        .then(t => { clearTimeout(timer); resolve(t); })
+        .catch(e => { clearTimeout(timer); reject(e); });
+    });
+  },
+
+  /* 解析 RSS / Atom XML 为条目数组 */
+  _parseFeed(xmlText) {
+    const doc = new DOMParser().parseFromString(xmlText, 'text/xml');
+    if (doc.querySelector('parsererror')) throw new Error('XML 解析失败');
+    const pick = (el, tags) => {
+      for (const t of tags) {
+        const n = el.getElementsByTagName(t)[0];
+        if (n && n.textContent) return n.textContent.trim();
+      }
+      return '';
+    };
+    let nodes = Array.from(doc.getElementsByTagName('item'));
+    let isAtom = false;
+    if (!nodes.length) { nodes = Array.from(doc.getElementsByTagName('entry')); isAtom = true; }
+    return nodes.map(n => {
+      let link = pick(n, ['link']);
+      if (isAtom && !link) {
+        const l = n.getElementsByTagName('link')[0];
+        if (l) link = l.getAttribute('href') || '';
+      }
+      const desc = pick(n, ['description', 'summary', 'content:encoded', 'content']);
+      return {
+        title: pick(n, ['title']),
+        link,
+        desc: this._stripHTML(desc),
+        pubDate: pick(n, ['pubDate', 'published', 'updated', 'dc:date'])
+      };
+    }).filter(x => x.title);
+  },
+
+  _stripHTML(html) {
+    if (!html) return '';
+    const d = document.createElement('div');
+    d.innerHTML = html;
+    return (d.textContent || '').replace(/\s+/g, ' ').trim();
+  },
+
+  _toDate(str) {
+    if (!str) return Utils.today();
+    const d = new Date(str);
+    if (isNaN(d.getTime())) return Utils.today();
+    const p = n => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+  },
+
+  /* 抓取单个源：依次尝试多个 CORS 代理 */
+  async fetchSource(src) {
+    const enc = encodeURIComponent(src.url);
+    const attempts = [
+      { type: 'json', url: `https://api.rss2json.com/v1/api.json?rss_url=${enc}&count=20` },
+      { type: 'xml',  url: `https://api.allorigins.win/raw?url=${enc}` },
+      { type: 'xml',  url: `https://corsproxy.io/?url=${enc}` },
+      { type: 'xml',  url: `https://api.codetabs.com/v1/proxy?quest=${enc}` },
+    ];
+    let lastErr = null;
+    for (const a of attempts) {
+      try {
+        const text = await this._fetchText(a.url);
+        if (a.type === 'json') {
+          const j = JSON.parse(text);
+          if (j.status !== 'ok' || !Array.isArray(j.items) || !j.items.length) throw new Error(j.message || '无数据');
+          return j.items.map(it => ({
+            title: (it.title || '').trim(),
+            link: it.link || '',
+            desc: this._stripHTML(it.description || it.content || ''),
+            pubDate: it.pubDate || ''
+          })).filter(x => x.title);
+        }
+        const items = this._parseFeed(text);
+        if (!items.length) throw new Error('无条目');
+        return items;
+      } catch (e) { lastErr = e; }
+    }
+    throw lastErr || new Error('全部代理均失败');
+  },
+
+  /* 生成条目对象 */
+  _buildItem(raw, src) {
+    const now = new Date();
+    const p = n => String(n).padStart(2, '0');
+    const summary = raw.desc ? raw.desc.slice(0, 120) : '';
+    return {
+      title: raw.title.slice(0, 120),
+      summary,
+      url: raw.link,
+      platform: src.name,
+      contentDate: this._toDate(raw.pubDate),
+      crawlBatch: Utils.today() + '-' + p(now.getHours()),
+      crawlTime: Utils.today() + ' ' + now.toTimeString().slice(0, 8),
+      likes: 0, comments: 0, hotRank: 0,
+      contentCat: src.contentCat || '综合新闻',
+      sourceCat: src.sourceCat || '权威新闻平台',
+      heatLevel: '普通热点',
+      aiTags: this._autoTags(raw.title + ' ' + summary),
+      images: [],
+      fullText: raw.desc || summary,
+      aiSummary: summary.slice(0, 60),
+      isFavorited: false
+    };
+  },
+
+  _autoTags(text) {
+    const dict = ['AI','人工智能','大模型','芯片','新能源','汽车','手机','苹果','华为','小米','特斯拉','股市','基金','房价','就业','教育','医疗','旅游','美食','明星','游戏','电商','出海','政策','消费'];
+    const hit = dict.filter(k => text.includes(k));
+    return hit.slice(0, 5).join(',');
+  },
+
+  /* 核心抓取流程 */
+  async runCrawl(onProgress) {
+    const srcs = this.sources().filter(s => s.enabled !== false);
+    const existing = Store.get('hotspot_data');
+    const seenTitle = new Set(existing.map(e => e.title));
+    const seenUrl = new Set(existing.map(e => e.url).filter(Boolean));
+    let added = 0;
+    const okList = [], failList = [];
+
+    for (const src of srcs) {
+      if (onProgress) onProgress(`正在抓取：${src.name} …`);
+      try {
+        const items = await this.fetchSource(src);
+        let n = 0;
+        items.slice(0, 15).forEach(raw => {
+          if (!raw.title) return;
+          if (seenTitle.has(raw.title)) return;
+          if (raw.link && seenUrl.has(raw.link)) return;
+          seenTitle.add(raw.title);
+          if (raw.link) seenUrl.add(raw.link);
+          Store.add('hotspot_data', this._buildItem(raw, src));
+          n++; added++;
+        });
+        okList.push(`${src.name} +${n}`);
+      } catch (e) {
+        failList.push(`${src.name}（${e.message || '失败'}）`);
+      }
+    }
+    localStorage.setItem(this.LAST_CRAWL_KEY, String(Date.now()));
+    this.cleanOldNews();
+    return { added, okList, failList, total: srcs.length };
+  },
+
+  /* 存档保留 30 天（未收藏的过期内容自动清理） */
+  cleanOldNews() {
+    const limit = Utils.addDays(Utils.today(), -30);
+    const favIds = new Set(Store.get('hotspot_favorites').map(f => f.hotspotId));
+    Store.get('hotspot_data').forEach(d => {
+      if (!favIds.has(d.id) && !d.isFavorited && (d.contentDate || '') < limit) {
+        Store.remove('hotspot_data', d.id);
+      }
+    });
+  },
+
+  /* 手动抓取（带 UI） */
+  simulateCrawl() { this.manualCrawl(); },
+
+  async manualCrawl() {
     App.openModal(`
       <div class="modal-title">⚡ 手动触发抓取</div>
-      <div id="crawl-area"><div class="ocr-loading"><div class="ocr-spinner"></div>正在全网抓取...增量去重中...</div></div>
+      <div id="crawl-area"><div class="ocr-loading"><div class="ocr-spinner"></div><span id="crawl-tip">正在连接抓取源…</span></div></div>
     `);
-    setTimeout(() => {
-      const newItems = [
-        { title:'国家统计局：7月CPI同比上涨0.5%', summary:'7月份居民消费价格指数同比上涨0.5%，环比上涨0.3%。', url:'http://www.stats.gov.cn', platform:'人民网', contentDate:Utils.today(), crawlBatch:Utils.today() + '-' + new Date().getHours(), crawlTime:Utils.today() + ' ' + new Date().toTimeString().slice(0,8), likes:0, comments:0, hotRank:0, contentCat:'财经', sourceCat:'权威新闻平台', heatLevel:'普通热点', aiTags:'CPI,物价,经济', images:[], fullText:'7月份居民消费价格指数同比上涨0.5%，环比上涨0.3%。其中食品价格下降0.2%，非食品价格上涨0.7%。', aiSummary:'7月CPI同比+0.5%，食品降非食品涨。', isFavorited:false },
-        { title:'AI绘画工具Midjourney V7发布', summary:'Midjourney发布V7版本，新增实时编辑、风格迁移等功能。', url:'https://www.midjourney.com', platform:'微信公众号', contentDate:Utils.today(), crawlBatch:Utils.today() + '-' + new Date().getHours(), crawlTime:Utils.today() + ' ' + new Date().toTimeString().slice(0,8), likes:8500, comments:420, hotRank:0, contentCat:'科技', sourceCat:'公众号专栏', heatLevel:'普通热点', aiTags:'AI,绘画,Midjourney', images:[], fullText:'Midjourney发布V7版本，新增实时编辑、风格迁移等功能，画质和速度均有大幅提升。', aiSummary:'MJ V7发布，新增实时编辑和风格迁移。', isFavorited:false },
-      ];
-      // 去重
-      const existing = Store.get('hotspot_data');
-      let added = 0;
-      newItems.forEach(item => {
-        if (!existing.find(e => e.title === item.title || e.url === item.url)) {
-          Store.add('hotspot_data', item);
-          added++;
-        }
-      });
-      document.getElementById('crawl-area').innerHTML = `
-        <div class="ai-report">
-          <div class="ai-report-title">✅ 抓取完成</div>
-          <div class="ai-report-body">
-            本轮新增 ${added} 条资讯（去重后）<br>
-            下一轮自动抓取：2小时后<br>
-            存档保留：30天
-          </div>
+    const tip = (msg) => { const el = document.getElementById('crawl-tip'); if (el) el.textContent = msg; };
+    let res;
+    try {
+      res = await this.runCrawl(tip);
+    } catch (e) {
+      const area = document.getElementById('crawl-area');
+      if (area) area.innerHTML = `
+        <div class="ocr-result">抓取异常：${Utils.escape(e.message || '未知错误')}</div>
+        <div class="modal-actions"><button class="btn-cancel" onclick="App.closeModal()">关闭</button><button class="btn-confirm" onclick="NewsMod.manualCrawl()">重试</button></div>`;
+      return;
+    }
+    const area = document.getElementById('crawl-area');
+    if (!area) return;
+    const allFail = res.failList.length === res.total;
+    area.innerHTML = `
+      <div class="ai-report">
+        <div class="ai-report-title">${allFail ? '⚠️ 抓取失败' : '✅ 抓取完成'}</div>
+        <div class="ai-report-body">
+          本轮新增 <b>${res.added}</b> 条资讯（标题/URL 双重去重）<br>
+          ${res.okList.length ? '成功：' + Utils.escape(res.okList.join('、')) + '<br>' : ''}
+          ${res.failList.length ? '<span style="color:#C08B7D;">失败：' + Utils.escape(res.failList.join('、')) + '</span><br>' : ''}
+          ${allFail ? '<div class="text-sm" style="margin-top:6px;">可能原因：当前网络无法访问外部 RSS 或公共代理被限流。可稍后重试，或在「抓取源」中更换为可访问的 RSS 地址。</div>' : ''}
+          <div class="text-sm text-light" style="margin-top:6px;">下一轮自动抓取：2 小时后 · 存档保留 30 天</div>
         </div>
-        <div class="modal-actions"><button class="btn-confirm" onclick="App.closeModal();NewsMod.renderFeed();">查看</button></div>
-      `;
-    }, 2500);
+      </div>
+      <div class="modal-actions">
+        <button class="btn-cancel" onclick="NewsMod.manageSources()">抓取源</button>
+        <button class="btn-confirm" onclick="App.closeModal();App.render();">查看</button>
+      </div>`;
+  },
+
+  /* 后台自动抓取：距上次超过 2 小时则静默执行 */
+  async autoCrawl(force) {
+    const last = +(localStorage.getItem(this.LAST_CRAWL_KEY) || 0);
+    if (!force && Date.now() - last < this.CRAWL_INTERVAL_MS) return;
+    try {
+      const res = await this.runCrawl();
+      if (res.added > 0) {
+        Store.add('inbox', {
+          type: 'info', source: '热点资讯', title: '热点资讯已更新',
+          content: `自动抓取新增 ${res.added} 条资讯`,
+          date: Utils.today() + ' ' + new Date().toTimeString().slice(0, 5),
+          read: false, actionModule: 'news', actionSub: 'feed', actionId: 0, auto: true
+        });
+        if (App.refreshNotifications) App.refreshNotifications();
+        if (App.currentModule === 'news') App.render();
+      }
+    } catch (e) { /* 静默失败，等待下一轮 */ }
+  },
+
+  startAutoCrawl() {
+    // 启动后 8 秒尝试一次（避免拖慢首屏），之后每 30 分钟检查是否到期
+    setTimeout(() => this.autoCrawl(), 8000);
+    setInterval(() => this.autoCrawl(), 30 * 60 * 1000);
+  },
+
+  /* ===== 抓取源管理 ===== */
+  manageSources() {
+    const list = this.sources();
+    App.openModal(`
+      <div class="modal-title">📡 抓取源管理</div>
+      <div class="text-sm text-light mb-8">支持任意 RSS / Atom 地址。抓取通过公共 CORS 代理完成，个别源可能因目标站点限制而失败。</div>
+      <div id="src-list">
+        ${list.map(s => `
+          <div class="card" style="padding:10px;">
+            <div class="flex-between">
+              <div style="min-width:0;">
+                <div class="text-bold">${Utils.escape(s.name)} <span class="tag-small">${Utils.escape(s.contentCat || '')}</span></div>
+                <div class="text-sm text-light" style="word-break:break-all;">${Utils.escape(s.url)}</div>
+              </div>
+              <div class="flex gap-8">
+                <button class="btn ${s.enabled !== false ? 'btn-secondary' : 'btn-outline'} btn-sm" onclick="NewsMod.toggleSource(${s.id})">${s.enabled !== false ? '启用中' : '已停用'}</button>
+                <button class="btn btn-cancel btn-sm" onclick="NewsMod.delSource(${s.id})">✕</button>
+              </div>
+            </div>
+          </div>`).join('')}
+      </div>
+      <div class="divider"></div>
+      <div class="form-group"><label class="form-label">新增源名称</label><input type="text" id="src-name" placeholder="如：知乎日报"></div>
+      <div class="form-group"><label class="form-label">RSS 地址</label><input type="text" id="src-url" placeholder="https://..."></div>
+      <div class="two-col">
+        <div class="form-group"><label class="form-label">内容分类</label><select id="src-cat">${['综合新闻','财经','科技','社会','娱乐','生活','行业自媒体','博主创作素材'].map(c => `<option>${c}</option>`).join('')}</select></div>
+        <div class="form-group"><label class="form-label">来源分类</label><select id="src-scat">${['权威新闻平台','行业垂直媒体','公众号专栏','社交平台'].map(c => `<option>${c}</option>`).join('')}</select></div>
+      </div>
+      <div class="modal-actions">
+        <button class="btn-cancel" onclick="App.closeModal()">关闭</button>
+        <button class="btn-confirm" onclick="NewsMod.addSource()">+ 添加源</button>
+      </div>
+    `);
+  },
+
+  addSource() {
+    const name = document.getElementById('src-name').value.trim();
+    const url = document.getElementById('src-url').value.trim();
+    if (!name || !url) { App.showToast('请填写名称和地址', 'error'); return; }
+    if (!/^https?:\/\//i.test(url)) { App.showToast('地址需以 http:// 或 https:// 开头', 'error'); return; }
+    Store.add('news_sources', {
+      name, url,
+      contentCat: document.getElementById('src-cat').value,
+      sourceCat: document.getElementById('src-scat').value,
+      enabled: true
+    });
+    App.showToast('已添加', 'success');
+    this.manageSources();
+  },
+
+  toggleSource(id) {
+    const s = Store.find('news_sources', x => x.id === id);
+    if (!s) return;
+    Store.update('news_sources', id, { enabled: s.enabled === false });
+    this.manageSources();
+  },
+
+  delSource(id) {
+    App.confirm('确定删除该抓取源吗？', () => {
+      Store.remove('news_sources', id);
+      NewsMod.manageSources();
+    }, '删除抓取源');
   }
 };

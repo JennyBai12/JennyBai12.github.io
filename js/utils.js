@@ -543,6 +543,53 @@ const Utils = {
     return sym + Number(amount || 0).toFixed(2);
   },
 
+  /* ============ 模糊匹配（供影院/标签/衣物搜索复用） ============
+   * 支持：完全包含 > 前缀匹配 > 顺序子序列匹配（如 "wd" 匹配 "万达"拼音首字母场景由调用方补充）
+   * list: 字符串数组 或 对象数组（配合 keyFn 取出文本）
+   * 返回：按相关度排序的原始条目数组 */
+  fuzzyMatch(list, query, keyFn, limit) {
+    const arr = Array.isArray(list) ? list : [];
+    const max = limit || 8;
+    const q = String(query || '').trim().toLowerCase();
+    const getText = keyFn || (x => String(x == null ? '' : x));
+    if (!q) return arr.slice(0, max);
+
+    const scored = [];
+    arr.forEach(item => {
+      const text = String(getText(item) || '');
+      const t = text.toLowerCase();
+      if (!t) return;
+      let score = -1;
+      if (t === q) score = 1000;
+      else if (t.indexOf(q) === 0) score = 800 - t.length;
+      else if (t.indexOf(q) > -1) score = 600 - t.indexOf(q) - t.length * 0.1;
+      else if (Utils._subseq(t, q)) score = 300 - t.length * 0.1;
+      if (score > -1) scored.push({ item, score });
+    });
+    scored.sort((a, b) => b.score - a.score);
+    return scored.slice(0, max).map(s => s.item);
+  },
+
+  /* 单条模糊命中判断：query 是否模糊匹配 text（含包含 / 顺序子序列 / 多关键词空格分词） */
+  fuzzyHit(query, text) {
+    const q = String(query || '').trim().toLowerCase();
+    const t = String(text || '').toLowerCase();
+    if (!q) return true;
+    if (!t) return false;
+    // 空格分词：每个词都需命中（任一方式）
+    const words = q.split(/\s+/).filter(Boolean);
+    return words.every(w => t.indexOf(w) > -1 || Utils._subseq(t, w));
+  },
+
+  /* 顺序子序列判断：q 的字符按顺序出现在 t 中 */
+  _subseq(t, q) {
+    let i = 0;
+    for (let j = 0; j < t.length && i < q.length; j++) {
+      if (t[j] === q[i]) i++;
+    }
+    return i === q.length;
+  },
+
   /* 生成唯一 ID */
   genId() { return Date.now() + Math.floor(Math.random() * 1000); }
 };

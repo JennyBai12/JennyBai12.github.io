@@ -15,6 +15,7 @@ const HealthMod = {
         <div class="sub-tab ${this.subTab === 'medical' ? 'active' : ''}" onclick="HealthMod.setSub('medical')">体检档案</div>
         <div class="sub-tab ${this.subTab === 'posture' ? 'active' : ''}" onclick="HealthMod.setSub('posture')">体态管理</div>
         <div class="sub-tab ${this.subTab === 'skin' ? 'active' : ''}" onclick="HealthMod.setSub('skin')">皮肤管理</div>
+        <div class="sub-tab ${this.subTab === 'mens' ? 'active' : ''}" onclick="HealthMod.setSub('mens')">经期记录</div>
         <div class="sub-tab ${this.subTab === 'summary' ? 'active' : ''}" onclick="HealthMod.setSub('summary')">健康总结</div>
       </div>
       <div id="health-sub"></div>
@@ -24,6 +25,7 @@ const HealthMod = {
     else if (this.subTab === 'medical') this.renderMedical();
     else if (this.subTab === 'posture') this.renderPosture();
     else if (this.subTab === 'skin') this.renderSkin();
+    else if (this.subTab === 'mens') this.renderMens();
     else this.renderSummary();
   },
 
@@ -674,22 +676,32 @@ const HealthMod = {
         </div>
         <div class="form-group"><label class="form-label">手动补充/覆盖备注（如：头前伸、圆肩等）</label><textarea id="pt-manual" rows="2" placeholder="可填写你对照照片发现的具体问题"></textarea></div>
         <div class="form-group"><label class="form-label">自定义改善方案</label><textarea id="pt-plan" rows="2" placeholder="可覆盖AI建议"></textarea></div>
-        <div class="modal-actions"><button class="btn-cancel" onclick="App.closeModal()">${I18n.t('cancel')}</button><button class="btn-confirm" onclick="HealthMod.savePosture(${JSON.stringify(analysis)},${JSON.stringify(advice)})">保存报告</button></div>
+        <div class="modal-actions"><button class="btn-cancel" onclick="App.closeModal()">${I18n.t('cancel')}</button><button class="btn-confirm" onclick="HealthMod.savePosture()">💾 保存报告</button></div>
       `;
+      this._postureAI = { analysis, advice };
     } catch (e) {
-      area.innerHTML = '<div class="ocr-result">分析失败，请手动填写报告。</div>';
+      this._postureAI = { analysis: '', advice: '' };
+      area.innerHTML = `
+        <div class="ocr-result">自动分析失败，可手动填写报告后保存。</div>
+        <div class="form-group"><label class="form-label">手动补充/覆盖备注</label><textarea id="pt-manual" rows="2" placeholder="可填写你对照照片发现的具体问题"></textarea></div>
+        <div class="form-group"><label class="form-label">自定义改善方案</label><textarea id="pt-plan" rows="2"></textarea></div>
+        <div class="modal-actions"><button class="btn-cancel" onclick="App.closeModal()">${I18n.t('cancel')}</button><button class="btn-confirm" onclick="HealthMod.savePosture()">💾 保存报告</button></div>
+      `;
     }
   },
 
-  savePosture(analysis, advice) {
+  savePosture() {
+    const ai = this._postureAI || { analysis: '', advice: '' };
     const manual = document.getElementById('pt-manual')?.value || '';
     const plan = document.getElementById('pt-plan')?.value || '';
+    if (!ai.analysis && !manual) { App.showToast('请填写备注后再保存', 'error'); return; }
     Store.add('posture_records', {
       date: Utils.today(), images: this._postureImgs || [],
-      aiAnalysis: analysis, aiAdvice: advice,
+      aiAnalysis: ai.analysis, aiAdvice: ai.advice,
       manualNotes: manual, manualPlan: plan
     });
     Store.logChange('health', '体态检测', 0, '新增体态AI检测报告');
+    this._postureAI = null; this._postureImgs = [];
     App.closeModal(); App.showToast(I18n.t('saved'), 'success'); App.render();
   },
 
@@ -788,17 +800,29 @@ const HealthMod = {
           </div>
         </div>
         <div class="form-group"><label class="form-label">手动补充/覆盖备注（如：痘痘、闭口位置）</label><textarea id="sk-manual" rows="2"></textarea></div>
-        <div class="modal-actions"><button class="btn-cancel" onclick="App.closeModal()">${I18n.t('cancel')}</button><button class="btn-confirm" onclick="HealthMod.saveSkin(${JSON.stringify(analysis)},${JSON.stringify(advice)})">保存报告</button></div>
+        <div class="form-group"><label class="form-label">自定义护肤方案</label><textarea id="sk-plan" rows="2" placeholder="可覆盖AI建议"></textarea></div>
+        <div class="modal-actions"><button class="btn-cancel" onclick="App.closeModal()">${I18n.t('cancel')}</button><button class="btn-confirm" onclick="HealthMod.saveSkin()">💾 保存报告</button></div>
       `;
+      this._skinAI = { analysis, advice };
     } catch (e) {
-      area.innerHTML = '<div class="ocr-result">分析失败，请手动填写报告。</div>';
+      this._skinAI = { analysis: '', advice: '' };
+      area.innerHTML = `
+        <div class="ocr-result">自动分析失败，可手动填写报告后保存。</div>
+        <div class="form-group"><label class="form-label">手动补充/覆盖备注</label><textarea id="sk-manual" rows="2"></textarea></div>
+        <div class="form-group"><label class="form-label">自定义护肤方案</label><textarea id="sk-plan" rows="2"></textarea></div>
+        <div class="modal-actions"><button class="btn-cancel" onclick="App.closeModal()">${I18n.t('cancel')}</button><button class="btn-confirm" onclick="HealthMod.saveSkin()">💾 保存报告</button></div>
+      `;
     }
   },
 
-  saveSkin(analysis, advice) {
+  saveSkin() {
+    const ai = this._skinAI || { analysis: '', advice: '' };
     const manual = document.getElementById('sk-manual')?.value || '';
-    Store.add('skin_records', { date: Utils.today(), images: this._skinImgs || [], aiAnalysis: analysis, aiAdvice: advice, manualNotes: manual, manualPlan: '' });
+    const plan = document.getElementById('sk-plan')?.value || '';
+    if (!ai.analysis && !manual) { App.showToast('请填写备注后再保存', 'error'); return; }
+    Store.add('skin_records', { date: Utils.today(), images: this._skinImgs || [], aiAnalysis: ai.analysis, aiAdvice: ai.advice, manualNotes: manual, manualPlan: plan });
     Store.logChange('health', '皮肤检测', 0, '新增皮肤AI检测报告');
+    this._skinAI = null; this._skinImgs = [];
     App.closeModal(); App.showToast(I18n.t('saved'), 'success'); App.render();
   },
 
@@ -822,6 +846,196 @@ const HealthMod = {
       manualNotes: document.getElementById('sk-manual').value,
     });
     App.closeModal(); App.showToast(I18n.t('updated'), 'success'); App.render();
+  },
+
+  /* ===== 经期记录 ===== */
+  mensMonth: null,   // 'YYYY-MM'，null 表示当前月
+
+  _diffDays(a, b) {
+    return Math.round((new Date(b + 'T00:00:00') - new Date(a + 'T00:00:00')) / 86400000);
+  },
+
+  mensStats() {
+    const recs = Store.get('menstrual_records').slice().sort((a, b) => a.startDate.localeCompare(b.startDate));
+    const cycles = [];
+    for (let i = 1; i < recs.length; i++) {
+      const d = this._diffDays(recs[i - 1].startDate, recs[i].startDate);
+      if (d > 10 && d < 90) cycles.push(d);
+    }
+    const durations = recs.filter(r => r.endDate).map(r => this._diffDays(r.startDate, r.endDate) + 1).filter(d => d > 0 && d < 15);
+    const avgCycle = cycles.length ? Math.round(cycles.reduce((s, x) => s + x, 0) / cycles.length) : 28;
+    const avgDur = durations.length ? Math.round(durations.reduce((s, x) => s + x, 0) / durations.length) : 5;
+    const last = recs[recs.length - 1] || null;
+    const nextStart = last ? Utils.addDays(last.startDate, avgCycle) : '';
+    const today = Utils.today();
+    const daysToNext = nextStart ? this._diffDays(today, nextStart) : null;
+    // 排卵日约为下次月经前 14 天
+    const ovulDay = nextStart ? Utils.addDays(nextStart, -14) : '';
+    return { recs, avgCycle, avgDur, last, nextStart, daysToNext, ovulDay, cycles, durations };
+  },
+
+  renderMens() {
+    const s = this.mensStats();
+    const today = Utils.today();
+    const ym = this.mensMonth || today.slice(0, 7);
+    const [yy, mm] = ym.split('-').map(Number);
+    const firstDay = new Date(yy, mm - 1, 1);
+    const daysInMonth = new Date(yy, mm, 0).getDate();
+    let lead = firstDay.getDay() - 1; if (lead < 0) lead = 6;   // 周一为首列
+
+    // 实际经期日期集合
+    const periodSet = new Set();
+    s.recs.forEach(r => {
+      const end = r.endDate || (this._diffDays(r.startDate, today) <= 10 ? today : r.startDate);
+      let d = r.startDate;
+      let guard = 0;
+      while (d <= end && guard++ < 20) { periodSet.add(d); d = Utils.addDays(d, 1); }
+    });
+    // 预测经期
+    const predictSet = new Set();
+    if (s.nextStart) {
+      for (let i = 0; i < s.avgDur; i++) predictSet.add(Utils.addDays(s.nextStart, i));
+    }
+    const ovulSet = new Set();
+    if (s.ovulDay) { for (let i = -2; i <= 2; i++) ovulSet.add(Utils.addDays(s.ovulDay, i)); }
+
+    const cells = [];
+    for (let i = 0; i < lead; i++) cells.push('<div></div>');
+    for (let d = 1; d <= daysInMonth; d++) {
+      const ds = `${ym}-${String(d).padStart(2, '0')}`;
+      let cls = 'mens-day';
+      if (periodSet.has(ds)) cls += ' is-period';
+      else if (predictSet.has(ds)) cls += ' is-predict';
+      else if (ovulSet.has(ds)) cls += ' is-ovul';
+      if (ds === today) cls += ' is-today';
+      cells.push(`<div class="${cls}">${d}</div>`);
+    }
+
+    const tipText = s.daysToNext === null ? '暂无足够数据预测'
+      : s.daysToNext > 0 ? `预计 ${s.daysToNext} 天后来潮（${s.nextStart}）`
+      : s.daysToNext === 0 ? '预计今天来潮，注意保暖 🌸'
+      : `已推迟 ${-s.daysToNext} 天，如持续请留意身体状况`;
+
+    document.getElementById('health-sub').innerHTML = `
+      <div class="flex-between mb-12">
+        <div class="subsection-title" style="margin:0;">🌸 经期记录</div>
+        <button class="btn btn-primary btn-sm" onclick="HealthMod.addMens()">+ 记录</button>
+      </div>
+
+      <div class="card">
+        <div class="mens-stat">
+          <div class="mens-stat-item"><div class="mens-stat-num">${s.avgCycle}</div><div class="mens-stat-label">平均周期(天)</div></div>
+          <div class="mens-stat-item"><div class="mens-stat-num">${s.avgDur}</div><div class="mens-stat-label">平均经期(天)</div></div>
+          <div class="mens-stat-item"><div class="mens-stat-num">${s.recs.length}</div><div class="mens-stat-label">累计记录</div></div>
+        </div>
+        <div class="text-sm mt-12" style="text-align:center;color:#C08B7D;">${tipText}</div>
+        ${s.ovulDay ? `<div class="text-sm text-light" style="text-align:center;margin-top:4px;">预计排卵日约 ${s.ovulDay}</div>` : ''}
+      </div>
+
+      <div class="card">
+        <div class="flex-between mb-8">
+          <button class="btn btn-outline btn-sm" onclick="HealthMod.mensNav(-1)">‹</button>
+          <div class="text-bold">${yy}年${mm}月</div>
+          <button class="btn btn-outline btn-sm" onclick="HealthMod.mensNav(1)">›</button>
+        </div>
+        <div class="mens-cal">
+          ${['一','二','三','四','五','六','日'].map(d => `<div class="cal-head" style="font-size:11px;text-align:center;color:var(--text-light);">${d}</div>`).join('')}
+          ${cells.join('')}
+        </div>
+        <div class="flex gap-12 mt-12" style="font-size:11px;color:var(--text-light);flex-wrap:wrap;justify-content:center;">
+          <span><span style="display:inline-block;width:10px;height:10px;border-radius:3px;background:#E8A7A7;"></span> 经期</span>
+          <span><span style="display:inline-block;width:10px;height:10px;border-radius:3px;background:rgba(232,167,167,0.32);"></span> 预测</span>
+          <span><span style="display:inline-block;width:10px;height:10px;border-radius:3px;background:rgba(150,180,200,0.4);"></span> 排卵期</span>
+        </div>
+      </div>
+
+      <div class="subsection-title">历史记录</div>
+      ${s.recs.slice().reverse().map(r => {
+        const dur = r.endDate ? this._diffDays(r.startDate, r.endDate) + 1 : null;
+        return `
+        <div class="card">
+          <div class="flex-between">
+            <div>
+              <div class="text-bold">${r.startDate} ${r.endDate ? '~ ' + r.endDate : '~ 进行中'}</div>
+              <div class="text-sm text-light mt-8">${dur ? dur + '天 · ' : ''}量：${r.flow || '-'} · 痛经：${r.pain || '-'} ${r.mood ? '· ' + r.mood : ''}</div>
+              ${r.symptoms ? `<div class="text-sm text-light">症状：${Utils.escape(r.symptoms)}</div>` : ''}
+              ${r.note ? `<div class="text-sm text-light">备注：${Utils.escape(r.note)}</div>` : ''}
+            </div>
+            <div class="flex gap-8">
+              <button class="btn btn-outline btn-sm" onclick="HealthMod.editMens(${r.id})">${I18n.t('edit')}</button>
+              <button class="btn btn-cancel btn-sm" onclick="HealthMod.delMens(${r.id})">✕</button>
+            </div>
+          </div>
+        </div>`;
+      }).join('') || '<div class="empty-state"><div class="empty-icon">🌸</div>还没有经期记录</div>'}
+    `;
+  },
+
+  mensNav(delta) {
+    const cur = this.mensMonth || Utils.today().slice(0, 7);
+    const [y, m] = cur.split('-').map(Number);
+    const d = new Date(y, m - 1 + delta, 1);
+    this.mensMonth = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+    this.renderMens();
+  },
+
+  addMens() { App.openModal(this.mensForm(null)); },
+
+  editMens(id) {
+    const r = Store.find('menstrual_records', x => x.id === id);
+    if (!r) return;
+    App.openModal(this.mensForm(r));
+  },
+
+  mensForm(r) {
+    const isEdit = !!r;
+    const flows = ['少', '中', '多'];
+    const pains = ['无', '轻微', '明显', '剧烈'];
+    const moods = ['😊', '😐', '😴', '😖', '😢'];
+    const symptomOpts = ['腹痛', '腰酸', '乏力', '头痛', '乳房胀痛', '情绪波动', '长痘', '食欲增加'];
+    const curSym = isEdit ? String(r.symptoms || '').split(',').filter(Boolean) : [];
+    return `
+      <div class="modal-title">${isEdit ? '✏️ 修改经期记录' : '🌸 新增经期记录'}</div>
+      <div class="two-col">
+        <div class="form-group"><label class="form-label">开始日期 <span class="req">*</span></label><input type="date" id="ms-start" value="${isEdit ? r.startDate : Utils.today()}"></div>
+        <div class="form-group"><label class="form-label">结束日期</label><input type="date" id="ms-end" value="${isEdit ? (r.endDate || '') : ''}"></div>
+      </div>
+      <div class="form-group"><label class="form-label">经量</label><div class="tag-pick" id="ms-flow">${flows.map(f => `<span class="tag${(isEdit ? r.flow : '中') === f ? ' active' : ''}" data-v="${f}" onclick="document.querySelectorAll('#ms-flow .tag').forEach(e=>e.classList.remove('active'));this.classList.add('active');">${f}</span>`).join('')}</div></div>
+      <div class="form-group"><label class="form-label">痛经程度</label><div class="tag-pick" id="ms-pain">${pains.map(p => `<span class="tag${(isEdit ? r.pain : '无') === p ? ' active' : ''}" data-v="${p}" onclick="document.querySelectorAll('#ms-pain .tag').forEach(e=>e.classList.remove('active'));this.classList.add('active');">${p}</span>`).join('')}</div></div>
+      <div class="form-group"><label class="form-label">伴随症状（可多选）</label><div class="tag-pick" id="ms-sym">${symptomOpts.map(sy => `<span class="tag${curSym.includes(sy) ? ' active' : ''}" data-v="${sy}" onclick="this.classList.toggle('active');">${sy}</span>`).join('')}</div></div>
+      <div class="form-group"><label class="form-label">心情</label><div class="tag-pick" id="ms-mood">${moods.map(m => `<span class="tag${(isEdit ? r.mood : '') === m ? ' active' : ''}" data-v="${m}" onclick="document.querySelectorAll('#ms-mood .tag').forEach(e=>e.classList.remove('active'));this.classList.add('active');">${m}</span>`).join('')}</div></div>
+      <div class="form-group"><label class="form-label">备注</label><textarea id="ms-note" rows="2" placeholder="如：饮食、用药、异常情况">${isEdit ? Utils.escape(r.note || '') : ''}</textarea></div>
+      <div class="modal-actions">
+        <button class="btn-cancel" onclick="App.closeModal()">${I18n.t('cancel')}</button>
+        <button class="btn-confirm" onclick="HealthMod.saveMens(${isEdit ? r.id : 'null'})">${I18n.t('save')}</button>
+      </div>`;
+  },
+
+  saveMens(id) {
+    const startDate = document.getElementById('ms-start').value;
+    if (!startDate) { App.showToast(I18n.t('fillRequired'), 'error'); return; }
+    const endDate = document.getElementById('ms-end').value;
+    if (endDate && endDate < startDate) { App.showToast('结束日期不能早于开始日期', 'error'); return; }
+    const pick = (sel) => { const el = document.querySelector(sel + ' .tag.active'); return el ? el.dataset.v : ''; };
+    const symptoms = Array.from(document.querySelectorAll('#ms-sym .tag.active')).map(e => e.dataset.v).join(',');
+    const payload = {
+      startDate, endDate,
+      flow: pick('#ms-flow') || '中',
+      pain: pick('#ms-pain') || '无',
+      symptoms,
+      mood: pick('#ms-mood'),
+      note: document.getElementById('ms-note').value
+    };
+    if (id) { Store.update('menstrual_records', id, payload); Store.logChange('health', '修改', id, '修改经期记录 ' + startDate); }
+    else { Store.add('menstrual_records', payload); Store.logChange('health', '新增', 0, '新增经期记录 ' + startDate); }
+    App.closeModal(); App.showToast(I18n.t('saved') || '已保存', 'success'); App.render();
+  },
+
+  delMens(id) {
+    App.confirm(I18n.t('confirmDelete'), () => {
+      Store.remove('menstrual_records', id);
+      App.showToast(I18n.t('deleted')); App.render();
+    });
   },
 
   /* ===== 健康总结（周/月/年 单人/全家） ===== */
