@@ -16,7 +16,7 @@ const App = {
     { id: 'reminders', icon: '⏰', label: 'reminders' },
     { id: 'calendar', icon: '📅', label: 'calendar' },
   ],
-  APP_VERSION: 'v33',
+  APP_VERSION: 'v34',
 
   /* 版本更新说明：新版本上线后首次打开自动弹窗展示，并同步推送至收件箱 */
   CHANGELOG: {
@@ -54,6 +54,14 @@ const App = {
       '🎬 电影「总花销」只记录票价（填表时电影品类仅显示「票价」，花销自动取其值），其余品类仍用「观影花销」',
       '🔍 学习记录新增按日期 / 时间段搜索：快捷（全部/近7天/近30天/今年）+ 自定义起止日期 + 内容关键字',
       '🔍 阅读管理（书库）新增按开始日期 / 时间段筛选，可配合状态标签一起使用'
+    ],
+    'v34': [
+      '📦 物资模块全面可编辑：消耗品1/2、耐用品主项 / 次项、花草 均可回改任意字段',
+      '🪴 花草「输入名称即自动识别」：内置常见花草知识库，自动带出品种分类、浇水周期、施肥周期与施肥建议（可手动覆盖）',
+      '🔧 耐用品「次项」新增独立「使用次数」：每个配件可单独「使用+1」独立计数，不再只跟随主项',
+      '📝 误触保护扩展到全模块：物资 / 习惯 / 衣橱（衣物、穿搭打卡、二手处理）等所有手动输入表单，未保存误触退出自动存草稿，下次进入可继续编辑',
+      '📚 阅读管理全面可编辑：书籍新增「编辑」按钮（详情页与卡片均可改），书籍「分类」改为可多选标签并自动记忆历史标签',
+      '🌐 修复英文模式下部分字段不翻译的问题：切换语言后动态渲染内容也会重新翻译，并补全物资 / 习惯 / 衣橱 / 花草表单的中英双语'
     ]
   },
 
@@ -398,6 +406,8 @@ const App = {
     else if (m === 'reminders' && typeof RemindersMod !== 'undefined') RemindersMod.render(c);
     else if (m === 'calendar' && typeof CalendarMod !== 'undefined') CalendarMod.render(c);
     else c.innerHTML = `<div class="empty-state"><div class="empty-icon">🔧</div>模块开发中...</div>`;
+    // i18n：模块渲染后重新翻译本页内的 data-i18n / data-i18n-ph 元素，确保切换语言后动态内容也生效
+    if (typeof I18n !== 'undefined' && typeof I18n.setLang === 'function') I18n.setLang(I18n.lang);
   },
 
   /* ===== 首页 ===== */
@@ -1271,7 +1281,7 @@ const App = {
     if (inner.querySelector('.draft-banner')) return;
     const bar = document.createElement('div');
     bar.className = 'draft-banner';
-    bar.innerHTML = `📝 已为你恢复上次未完成的草稿（<span class="draft-discard" onclick="App.discardDraft('${key}')">丢弃</span>）`;
+    bar.innerHTML = `📝 ${I18n.t('draftRestored')}（<span class="draft-discard" onclick="App.discardDraft('${key}')">${I18n.t('discard')}</span>）`;
     inner.insertBefore(bar, inner.firstChild);
   },
 

@@ -1,3 +1,37 @@
+/* ===== 花草知识库（本地内置，输入名称自动识别品种/浇水/施肥周期与建议，可手动覆盖） ===== */
+const PLANT_DB = [
+  { kw: ['绿萝', '黄金葛', 'devil'], cat: '天南星科·喜阴', water: 7, fert: 30, advice: '生长期每 2–4 周施一次稀薄液态肥；冬季停肥，保持盆土微湿即可。' },
+  { kw: ['吊兰', '蜘蛛兰', 'spider'], cat: '天门冬科·喜半阴', water: 5, fert: 30, advice: '春秋每月施一次氮磷钾均衡肥；花剑抽出时增施磷钾肥。' },
+  { kw: ['虎皮兰', '虎尾兰', 'snake'], cat: '天门冬科·耐旱', water: 15, fert: 60, advice: '极耐旱，宁干勿湿；春夏季每 2 月施一次缓释肥即可。' },
+  { kw: ['仙人掌', '仙人球', 'cactus'], cat: '仙人掌科·喜阳', water: 20, fert: 90, advice: '生长季少量多肉专用肥，冬季完全断水断肥。' },
+  { kw: ['多肉', '玉露', '熊童子', 'succulent'], cat: '景天科·喜阳', water: 10, fert: 60, advice: '干透浇透，夏季遮阴控水；春秋施一次低氮多肉肥。' },
+  { kw: ['龟背竹', 'monstera'], cat: '天南星科·喜阴', water: 7, fert: 30, advice: '每月施一次液肥，叶背常喷雾增湿；避免阳光直射。' },
+  { kw: ['发财树', '瓜栗', 'money tree'], cat: '木棉科·喜阳', water: 10, fert: 45, advice: '耐旱怕涝，盆土干透再浇；生长期每月稀薄液肥。' },
+  { kw: ['文竹', 'asparagus'], cat: '天门冬科·喜阴', water: 4, fert: 30, advice: '喜湿润，常喷水；每月施稀薄液肥，忌浓肥。' },
+  { kw: ['富贵竹', 'dracaena', '转运竹'], cat: '龙舌兰科·喜阴', water: 7, fert: 60, advice: '水养为主，每月滴 1–2 滴营养液；忌金属容器。' },
+  { kw: ['芦荟', 'aloe'], cat: '阿福花科·喜阳', water: 12, fert: 60, advice: '耐旱，干透浇透；春夏季每 2 月施一次多肉/仙人掌肥。' },
+  { kw: ['君子兰', 'clivia'], cat: '石蒜科·喜半阴', water: 7, fert: 30, advice: '冬春开花前施磷钾肥，夏季高温停肥；忌积水烂根。' },
+  { kw: ['月季', '玫瑰', 'rose'], cat: '蔷薇科·喜阳', water: 3, fert: 15, advice: '生长期薄肥勤施，花后补磷钾；每月一次复合肥+叶面肥。' },
+  { kw: ['茉莉', 'jasmine'], cat: '木犀科·喜阳', water: 2, fert: 15, advice: '喜酸怕碱，花期每 1–2 周施磷酸二氢钾肥；常浇矾肥水。' },
+  { kw: ['栀子', 'gardenia'], cat: '茜草科·喜酸', water: 2, fert: 20, advice: '喜酸性土，常施硫酸亚铁；花期施磷钾肥，忌碱性水。' },
+  { kw: ['杜鹃', '映山红', 'azalea'], cat: '杜鹃花科·喜酸', water: 3, fert: 30, advice: '喜酸怕碱，用雨水/矾肥水；花后及生长期施薄肥。' },
+  { kw: ['三角梅', '叶子花', 'bougainvillea'], cat: '紫茉莉科·喜阳', water: 5, fert: 20, advice: '控水促花，花期前施磷钾肥；花后修剪补肥。' },
+  { kw: ['绣球', 'hydrangea'], cat: '绣球科·喜半阴', water: 2, fert: 20, advice: '喜湿润，夏季遮阴；调蓝可用硫酸铝，花前施磷钾肥。' },
+  { kw: ['红掌', '花烛', 'anthurium'], cat: '天南星科·喜阴', water: 5, fert: 30, advice: '喜高温高湿，每 2–3 周施稀薄液肥；忌强光。' },
+  { kw: ['白掌', '和平芋', 'spathiphyllum'], cat: '天南星科·喜阴', water: 5, fert: 30, advice: '喜湿怕旱，常喷雾；每月施一次稀薄液肥。' },
+  { kw: ['薄荷', 'mint'], cat: '唇形科·喜阳', water: 2, fert: 20, advice: '生长极快，每周薄肥一次；多修剪促分枝。' },
+  { kw: ['绿元宝', '栗豆树', 'castanospermum'], cat: '豆科·喜阳', water: 7, fert: 45, advice: '幼苗期保持湿润，成株耐旱；生长期每月液肥。' },
+  { kw: ['橡皮树', 'ficus', '榕'], cat: '桑科·喜阳', water: 7, fert: 30, advice: '喜光耐旱，干透浇透；每月施一次氮肥为主的液肥。' },
+  { kw: ['琴叶榕', 'fiddle'], cat: '桑科·喜阳', water: 7, fert: 30, advice: '喜明亮散射光，保持盆土微湿；每月稀薄液肥。' },
+  { kw: ['常春藤', 'ivy'], cat: '五加科·耐阴', water: 4, fert: 30, advice: '喜湿润环境，常喷雾；每月施稀薄液肥。' },
+  { kw: ['铜钱草', '香菇草', ' pennywort'], cat: '伞形科·喜水', water: 1, fert: 20, advice: '可半水半土养护，喜肥喜水；每 2 周液肥。' },
+  { kw: ['豆瓣绿', '碧玉', 'peperomia'], cat: '胡椒科·耐阴', water: 6, fert: 40, advice: '耐旱怕涝，干透浇透；生长期每月稀薄液肥。' },
+  { kw: ['波斯顿蕨', '蕨', 'fern'], cat: '肾蕨科·喜阴湿', water: 2, fert: 40, advice: '极喜湿，常喷雾保持空气湿润；每月稀薄液肥。' },
+  { kw: ['兰花', '蝴蝶兰', 'orchid'], cat: '兰科·附生', water: 7, fert: 30, advice: '用水苔/树皮栽培，干透再浇；施兰花专用肥，薄肥勤施。' },
+  { kw: ['百合', 'lily'], cat: '百合科·喜阳', water: 4, fert: 20, advice: '种球植物，花前施磷钾肥；花后养球补肥。' },
+  { kw: ['向日葵', 'sunflower'], cat: '菊科·喜阳', water: 3, fert: 15, advice: '喜光喜肥，生长期每周施一次复合肥；花蕾期增磷钾。' }
+];
+
 /* ===== 生活物资模块（消耗品1/消耗品2/耐用品+归档+二手） ===== */
 const GoodsMod = {
   subTab: 'c1',
@@ -51,6 +85,7 @@ const GoodsMod = {
             <div class="flex gap-8">
               <button class="btn btn-outline btn-sm" onclick="GoodsMod.updateStock('c1', ${g.id})">更新库存</button>
               <button class="btn btn-outline btn-sm" onclick="GoodsMod.archive('c1', ${g.id})">归档</button>
+              <button class="btn btn-outline btn-sm" onclick="GoodsMod.add('c1', ${g.id})">编辑</button>
               <button class="btn btn-cancel btn-sm" onclick="GoodsMod.del('c1', ${g.id})">✕</button>
             </div>
           </div>
@@ -92,6 +127,7 @@ const GoodsMod = {
             <div class="flex gap-8">
               <button class="btn btn-outline btn-sm" onclick="GoodsMod.updateStock('c2', ${g.id})">更新库存</button>
               <button class="btn btn-outline btn-sm" onclick="GoodsMod.archive('c2', ${g.id})">归档</button>
+              <button class="btn btn-outline btn-sm" onclick="GoodsMod.add('c2', ${g.id})">编辑</button>
               <button class="btn btn-cancel btn-sm" onclick="GoodsMod.del('c2', ${g.id})">✕</button>
             </div>
           </div>
@@ -126,6 +162,7 @@ const GoodsMod = {
             <div class="flex gap-8">
               <button class="btn btn-outline btn-sm" onclick="GoodsMod.useDurable(${m.id})">使用+1</button>
               <button class="btn btn-outline btn-sm" onclick="GoodsMod.addDurableSub(${m.id})">+配件</button>
+              <button class="btn btn-outline btn-sm" onclick="GoodsMod.addDurableMain(${m.id})">编辑</button>
               <button class="btn btn-cancel btn-sm" onclick="GoodsMod.delDurableMain(${m.id})">✕</button>
             </div>
           </div>
@@ -140,6 +177,8 @@ const GoodsMod = {
                 <div class="list-title">${Utils.escape(s.name)} <span class="tag-small">次项</span></div>
                 <div class="list-meta">¥${s.totalPrice} · ${s.cumUses}/${s.estTotalUses}次 · 折旧¥${s.unitDepreciation.toFixed(2)}/次 · 残值¥${subRem.toFixed(2)}</div>
               </div>
+              <span class="list-action" onclick="GoodsMod.useDurableSub(${s.id})">使用+1</span>
+              <span class="list-action" onclick="GoodsMod.addDurableSub(${m.id}, ${s.id})">编辑</span>
               <span class="list-action" onclick="GoodsMod.delDurableSub(${s.id})">✕</span>
             </div>`;
           }).join('')}
@@ -148,60 +187,118 @@ const GoodsMod = {
     `;
   },
 
-  addDurableMain() {
+  addDurableMain(editId) {
+    const ed = editId ? Store.find('goods_durable_main', d => d.id === editId) : null;
     App.openModal(`
-      <div class="modal-title">添加耐用品（主项）</div>
-      <div class="form-group"><label class="form-label">物品名称 <span class="req">*</span></label><input type="text" id="dm-name" placeholder="如：笔记本电脑"></div>
+      <div class="modal-title">${I18n.t(ed ? 'editDurableMain' : 'addDurableMain')}</div>
+      <div class="form-group"><label class="form-label">${I18n.t('itemName')} <span class="req">*</span></label><input type="text" id="dm-name" placeholder="如：笔记本电脑" value="${Utils.escape(ed ? ed.name : '')}"></div>
       <div class="two-col">
-        <div class="form-group"><label class="form-label">采购日期</label><input type="date" id="dm-date" value="${Utils.today()}"></div>
-        <div class="form-group"><label class="form-label">总价</label><input type="number" id="dm-price" value="0"></div>
+        <div class="form-group"><label class="form-label">${I18n.t('buyDate')}</label><input type="date" id="dm-date" value="${ed ? ed.buyDate : Utils.today()}"></div>
+        <div class="form-group"><label class="form-label">${I18n.t('totalPrice')}</label><input type="number" id="dm-price" value="${ed ? ed.totalPrice : 0}"></div>
       </div>
-      <div class="form-group"><label class="form-label">预估总使用次数</label><input type="number" id="dm-est" value="100"></div>
-      <div class="text-sm text-light">单次折旧 = 总价 ÷ 预估总使用次数</div>
-      <div class="modal-actions"><button class="btn-cancel" onclick="App.closeModal()">${I18n.t('cancel')}</button><button class="btn-confirm" onclick="GoodsMod.saveDurableMain()">${I18n.t('save')}</button></div>
+      <div class="form-group"><label class="form-label">${I18n.t('estUses')}</label><input type="number" id="dm-est" value="${ed ? ed.estTotalUses : 100}"></div>
+      ${ed ? `<div class="text-sm text-light">累计已使用 ${ed.cumUses} 次（每次使用 +1 自动累加折旧）</div>` : '<div class="text-sm text-light">单次折旧 = 总价 ÷ 预估总使用次数</div>'}
+      <div class="modal-actions"><button class="btn-cancel" onclick="App.closeModal()">${I18n.t('cancel')}</button><button class="btn-confirm" onclick="GoodsMod.saveDurableMain(${ed ? ed.id : 'null'})">${I18n.t('save')}</button></div>
     `);
+    App.ensureDraft('durable_main',
+      () => ({
+        name: document.getElementById('dm-name')?.value || '',
+        date: document.getElementById('dm-date')?.value || '',
+        price: document.getElementById('dm-price')?.value || '0',
+        est: document.getElementById('dm-est')?.value || '100',
+      }),
+      (d) => {
+        if (d.name != null) document.getElementById('dm-name').value = d.name;
+        if (d.date != null) document.getElementById('dm-date').value = d.date;
+        if (d.price != null) document.getElementById('dm-price').value = d.price;
+        if (d.est != null) document.getElementById('dm-est').value = d.est;
+      },
+      () => GoodsMod.addDurableMain()
+    );
   },
 
-  saveDurableMain() {
+  saveDurableMain(editId) {
     const name = document.getElementById('dm-name').value.trim();
     if (!name) { App.showToast(I18n.t('fillRequired'), 'error'); return; }
     const price = +document.getElementById('dm-price').value;
     const est = +document.getElementById('dm-est').value || 1;
-    Store.add('goods_durable_main', {
-      name, buyDate: document.getElementById('dm-date').value,
-      totalPrice: price, estTotalUses: est, cumUses: 0,
-      unitDepreciation: price / est,
-      secondhandPrice: 0, secondhandDate: '', archived: false
-    });
-    App.closeModal(); App.showToast(I18n.t('added'), 'success'); App.render();
+    if (editId) {
+      const old = Store.find('goods_durable_main', d => d.id === editId);
+      Store.update('goods_durable_main', editId, {
+        name, buyDate: document.getElementById('dm-date').value,
+        totalPrice: price, estTotalUses: est,
+        unitDepreciation: price / est,
+        secondhandPrice: old.secondhandPrice, secondhandDate: old.secondhandDate, archived: old.archived
+      });
+      App.showToast(I18n.t('updated'), 'success');
+    } else {
+      Store.add('goods_durable_main', {
+        name, buyDate: document.getElementById('dm-date').value,
+        totalPrice: price, estTotalUses: est, cumUses: 0,
+        unitDepreciation: price / est,
+        secondhandPrice: 0, secondhandDate: '', archived: false
+      });
+      App.showToast(I18n.t('added'), 'success');
+    }
+    App.clearDraft('durable_main');
+    App.closeModal(); App.render();
   },
 
-  addDurableSub(mainId) {
+  addDurableSub(mainId, editId) {
+    const ed = editId ? Store.find('goods_durable_sub', s => s.id === editId) : null;
     App.openModal(`
-      <div class="modal-title">添加配套次项</div>
-      <div class="form-group"><label class="form-label">配件名称 <span class="req">*</span></label><input type="text" id="ds-name" placeholder="如：无线鼠标"></div>
+      <div class="modal-title">${I18n.t(ed ? 'editDurableSub' : 'addDurableSub')}</div>
+      <div class="form-group"><label class="form-label">${I18n.t('itemName')} <span class="req">*</span></label><input type="text" id="ds-name" placeholder="如：无线鼠标" value="${Utils.escape(ed ? ed.name : '')}"></div>
       <div class="two-col">
-        <div class="form-group"><label class="form-label">采购日期</label><input type="date" id="ds-date" value="${Utils.today()}"></div>
-        <div class="form-group"><label class="form-label">总价</label><input type="number" id="ds-price" value="0"></div>
+        <div class="form-group"><label class="form-label">${I18n.t('buyDate')}</label><input type="date" id="ds-date" value="${ed ? ed.buyDate : Utils.today()}"></div>
+        <div class="form-group"><label class="form-label">${I18n.t('totalPrice')}</label><input type="number" id="ds-price" value="${ed ? ed.totalPrice : 0}"></div>
       </div>
-      <div class="form-group"><label class="form-label">预估总使用次数</label><input type="number" id="ds-est" value="100"></div>
-      <div class="text-sm text-light">登记主项使用次数时，次项同步累加。</div>
-      <div class="modal-actions"><button class="btn-cancel" onclick="App.closeModal()">${I18n.t('cancel')}</button><button class="btn-confirm" onclick="GoodsMod.saveDurableSub(${mainId})">${I18n.t('save')}</button></div>
+      <div class="form-group"><label class="form-label">${I18n.t('estUses')}</label><input type="number" id="ds-est" value="${ed ? ed.estTotalUses : 100}"></div>
+      ${ed ? `<div class="text-sm text-light">子项累计已使用 ${ed.cumUses} 次（可在卡片单独「使用+1」）</div>` : '<div class="text-sm text-light">子项可单独记录使用次数，不依赖主项。</div>'}
+      <div class="modal-actions"><button class="btn-cancel" onclick="App.closeModal()">${I18n.t('cancel')}</button><button class="btn-confirm" onclick="GoodsMod.saveDurableSub(${mainId}, ${ed ? ed.id : 'null'})">${I18n.t('save')}</button></div>
     `);
+    App.ensureDraft('durable_sub',
+      () => ({
+        name: document.getElementById('ds-name')?.value || '',
+        date: document.getElementById('ds-date')?.value || '',
+        price: document.getElementById('ds-price')?.value || '0',
+        est: document.getElementById('ds-est')?.value || '100',
+      }),
+      (d) => {
+        if (d.name != null) document.getElementById('ds-name').value = d.name;
+        if (d.date != null) document.getElementById('ds-date').value = d.date;
+        if (d.price != null) document.getElementById('ds-price').value = d.price;
+        if (d.est != null) document.getElementById('ds-est').value = d.est;
+      },
+      () => GoodsMod.addDurableSub(mainId)
+    );
   },
 
-  saveDurableSub(mainId) {
+  saveDurableSub(mainId, editId) {
     const name = document.getElementById('ds-name').value.trim();
     if (!name) { App.showToast(I18n.t('fillRequired'), 'error'); return; }
     const price = +document.getElementById('ds-price').value;
     const est = +document.getElementById('ds-est').value || 1;
-    Store.add('goods_durable_sub', {
-      mainId, name, buyDate: document.getElementById('ds-date').value,
-      totalPrice: price, estTotalUses: est, cumUses: 0,
-      unitDepreciation: price / est,
-      secondhandPrice: 0, secondhandDate: '', archived: false
-    });
-    App.closeModal(); App.showToast(I18n.t('added'), 'success'); App.render();
+    if (editId) {
+      const old = Store.find('goods_durable_sub', s => s.id === editId);
+      Store.update('goods_durable_sub', editId, {
+        name, buyDate: document.getElementById('ds-date').value,
+        totalPrice: price, estTotalUses: est,
+        unitDepreciation: price / est,
+        secondhandPrice: old.secondhandPrice, secondhandDate: old.secondhandDate, archived: old.archived
+      });
+      App.showToast(I18n.t('updated'), 'success');
+    } else {
+      Store.add('goods_durable_sub', {
+        mainId, name, buyDate: document.getElementById('ds-date').value,
+        totalPrice: price, estTotalUses: est, cumUses: 0,
+        unitDepreciation: price / est,
+        secondhandPrice: 0, secondhandDate: '', archived: false
+      });
+      App.showToast(I18n.t('added'), 'success');
+    }
+    App.clearDraft('durable_sub');
+    App.closeModal(); App.render();
   },
 
   useDurable(mainId) {
@@ -212,6 +309,13 @@ const GoodsMod = {
     });
     Store.logChange('goods', '耐用品使用', mainId, main.name + ' 使用+1（配套次项同步）');
     App.showToast('使用+1', 'success'); App.render();
+  },
+
+  useDurableSub(id) {
+    const sub = Store.find('goods_durable_sub', s => s.id === id);
+    Store.update('goods_durable_sub', id, { cumUses: sub.cumUses + 1 });
+    Store.logChange('goods', '次项使用', id, (sub.name || '次项') + ' 使用+1');
+    App.showToast('次项使用+1', 'success'); App.render();
   },
 
   delDurableMain(id) {
@@ -241,28 +345,50 @@ const GoodsMod = {
     App.confirm(I18n.t('confirmDelete'), () => { Store.remove('goods_durable_sub', id); App.render(); });
   },
 
-  /* ===== 通用：添加消耗品 ===== */
-  add(type) {
+  /* ===== 通用：添加 / 编辑消耗品 ===== */
+  add(type, editId) {
     const isC2 = type === 'c2';
+    const ed = editId ? Store.find(type === 'c1' ? 'goods_c1' : 'goods_c2', g => g.id === editId) : null;
     App.openModal(`
-      <div class="modal-title">添加${isC2 ? '洗护用品' : '消耗品'}</div>
-      <div class="form-group"><label class="form-label">物品名称 <span class="req">*</span></label><input type="text" id="g-name"></div>
-      <div class="form-group"><label class="form-label">分类</label><input type="text" id="g-classify" placeholder="如：纸巾、护肤"></div>
+      <div class="modal-title">${ed ? I18n.t('editConsumable') : I18n.t(isC2 ? 'addToiletry' : 'addConsumable')}</div>
+      <div class="form-group"><label class="form-label">${I18n.t('itemName')} <span class="req">*</span></label><input type="text" id="g-name" value="${Utils.escape(ed ? ed.name : '')}"></div>
+      <div class="form-group"><label class="form-label">${I18n.t('classify')}</label><input type="text" id="g-classify" placeholder="如：纸巾、护肤" value="${Utils.escape(ed ? ed.classify : '')}"></div>
       <div class="two-col">
-        <div class="form-group"><label class="form-label">采购日期</label><input type="date" id="g-buy" value="${Utils.today()}"></div>
-        <div class="form-group"><label class="form-label">预计用尽日期</label><input type="date" id="g-expire"></div>
+        <div class="form-group"><label class="form-label">${I18n.t('buyDate')}</label><input type="date" id="g-buy" value="${ed ? ed.buyDate : Utils.today()}"></div>
+        <div class="form-group"><label class="form-label">${I18n.t('expireDate')}</label><input type="date" id="g-expire" value="${ed ? ed.expireDate : ''}"></div>
       </div>
       <div class="two-col">
-        <div class="form-group"><label class="form-label">总价</label><input type="number" id="g-price" value="0"></div>
-        <div class="form-group"><label class="form-label">库存</label><input type="number" id="g-stock" value="1"></div>
+        <div class="form-group"><label class="form-label">${I18n.t('totalPrice')}</label><input type="number" id="g-price" value="${ed ? ed.totalPrice : 0}"></div>
+        <div class="form-group"><label class="form-label">${I18n.t('stock')}</label><input type="number" id="g-stock" value="${ed ? ed.stock : 1}"></div>
       </div>
-      <div class="form-group"><label class="form-label">备注</label><input type="text" id="g-remark"></div>
+      <div class="form-group"><label class="form-label">${I18n.t('remark')}</label><input type="text" id="g-remark" value="${Utils.escape(ed ? ed.remark : '')}"></div>
       ${isC2 ? '<div class="text-sm text-light">日均消耗价值 = 总价 ÷ (用尽日期 - 采购日期)天数，每日自动重算</div>' : ''}
-      <div class="modal-actions"><button class="btn-cancel" onclick="App.closeModal()">${I18n.t('cancel')}</button><button class="btn-confirm" onclick="GoodsMod.save('${type}')">${I18n.t('save')}</button></div>
+      <div class="modal-actions"><button class="btn-cancel" onclick="App.closeModal()">${I18n.t('cancel')}</button><button class="btn-confirm" onclick="GoodsMod.save('${type}', ${ed ? ed.id : 'null'})">${I18n.t('save')}</button></div>
     `);
+    App.ensureDraft('goods_' + type,
+      () => ({
+        name: document.getElementById('g-name')?.value || '',
+        classify: document.getElementById('g-classify')?.value || '',
+        buy: document.getElementById('g-buy')?.value || '',
+        expire: document.getElementById('g-expire')?.value || '',
+        price: document.getElementById('g-price')?.value || '0',
+        stock: document.getElementById('g-stock')?.value || '1',
+        remark: document.getElementById('g-remark')?.value || '',
+      }),
+      (d) => {
+        if (d.name != null) document.getElementById('g-name').value = d.name;
+        if (d.classify != null) document.getElementById('g-classify').value = d.classify;
+        if (d.buy != null) document.getElementById('g-buy').value = d.buy;
+        if (d.expire != null) document.getElementById('g-expire').value = d.expire;
+        if (d.price != null) document.getElementById('g-price').value = d.price;
+        if (d.stock != null) document.getElementById('g-stock').value = d.stock;
+        if (d.remark != null) document.getElementById('g-remark').value = d.remark;
+      },
+      () => GoodsMod.add('${type}')
+    );
   },
 
-  save(type) {
+  save(type, editId) {
     const name = document.getElementById('g-name').value.trim();
     if (!name) { App.showToast(I18n.t('fillRequired'), 'error'); return; }
     const data = {
@@ -271,15 +397,24 @@ const GoodsMod = {
       expireDate: document.getElementById('g-expire').value,
       totalPrice: +document.getElementById('g-price').value,
       stock: +document.getElementById('g-stock').value,
-      remark: document.getElementById('g-remark').value, image: '', archived: false,
+      remark: document.getElementById('g-remark').value, image: ''
     };
     if (type === 'c2') {
       const days = data.expireDate ? Utils.daysBetween(data.buyDate, data.expireDate) : 30;
       data.dayCost = days > 0 ? data.totalPrice / days : 0;
     }
-    Store.add(type === 'c1' ? 'goods_c1' : 'goods_c2', data);
-    Store.logChange('goods', '新增', 0, '新增物资: ' + name);
-    App.closeModal(); App.showToast(I18n.t('added'), 'success'); App.render();
+    if (editId) {
+      Store.update(type === 'c1' ? 'goods_c1' : 'goods_c2', editId, data);
+      Store.logChange('goods', '编辑', editId, '编辑物资: ' + name);
+      App.showToast(I18n.t('updated'), 'success');
+    } else {
+      data.archived = false;
+      Store.add(type === 'c1' ? 'goods_c1' : 'goods_c2', data);
+      Store.logChange('goods', '新增', 0, '新增物资: ' + name);
+      App.showToast(I18n.t('added'), 'success');
+    }
+    App.clearDraft('goods_' + type);
+    App.closeModal(); App.render();
   },
 
   /* ===== OCR 识别添加 ===== */
@@ -463,6 +598,7 @@ const GoodsMod = {
             </div>
             <div class="flex gap-8">
               <button class="btn btn-outline btn-sm" onclick="GoodsMod.plantDetail(${p.id})">详情</button>
+              <button class="btn btn-outline btn-sm" onclick="GoodsMod.addPlant(${p.id})">编辑</button>
               ${p.status === '养护中' ? `<button class="btn btn-outline btn-sm" onclick="GoodsMod.singleCare(${p.id})">养护</button>` : ''}
               ${p.status === '养护中' ? `<button class="btn btn-cancel btn-sm" onclick="GoodsMod.markDead(${p.id})">标记枯萎</button>` : ''}
               <button class="btn btn-cancel btn-sm" onclick="GoodsMod.delPlant(${p.id})">✕</button>
@@ -475,39 +611,93 @@ const GoodsMod = {
 
   setPlantFilter(f) { this.plantFilter = f; App.render(); },
 
-  addPlant() {
-    App.openModal(`
-      <div class="modal-title">🪴 添加花草</div>
-      <div class="form-group"><label class="form-label">花草名称 <span class="req">*</span></label><input type="text" id="pl-name" placeholder="如：绿萝"></div>
-      <div class="form-group"><label class="form-label">品种分类</label><input type="text" id="pl-variety" placeholder="如：天南星科"></div>
-      <div class="two-col">
-        <div class="form-group"><label class="form-label">购入日期</label><input type="date" id="pl-buy" value="${Utils.today()}"></div>
-        <div class="form-group"><label class="form-label">购入价格</label><input type="number" id="pl-price" value="0"></div>
-      </div>
-      <div class="two-col">
-        <div class="form-group"><label class="form-label">浇水周期（天）</label><input type="number" id="pl-wcycle" value="7"></div>
-        <div class="form-group"><label class="form-label">施肥周期（天）</label><input type="number" id="pl-fcycle" value="30"></div>
-      </div>
-      <div class="form-group"><label class="form-label">备注</label><input type="text" id="pl-remark" placeholder="如：放在客厅窗台"></div>
-      <div class="modal-actions"><button class="btn-cancel" onclick="App.closeModal()">${I18n.t('cancel')}</button><button class="btn-confirm" onclick="GoodsMod.savePlant()">${I18n.t('save')}</button></div>
-    `);
+  /* 根据名称匹配本地花草知识库，自动识别品种/浇水/施肥周期与建议 */
+  matchPlant() {
+    const raw = (document.getElementById('pl-name')?.value || '').trim();
+    if (!raw) return;
+    const q = raw.toLowerCase();
+    const hit = PLANT_DB.find(p => p.kw.some(k => k && (q.includes(k.toLowerCase()) || k.toLowerCase().includes(q))));
+    if (!hit) return;
+    const v = document.getElementById('pl-variety'), w = document.getElementById('pl-wcycle'),
+          f = document.getElementById('pl-fcycle'), a = document.getElementById('pl-fadvise');
+    if (v && !v.value) v.value = hit.cat;
+    if (w && !w.value) w.value = hit.water;
+    if (f && !f.value) f.value = hit.fert;
+    if (a && !a.value) a.value = hit.advice;
+    App.showToast('已自动识别为「' + raw + '」常见养护参数（可手动修改）', 'success');
   },
 
-  savePlant() {
+  addPlant(editId) {
+    const ed = editId ? Store.find('plants', p => p.id === editId) : null;
+    App.openModal(`
+      <div class="modal-title">🪴 ${I18n.t(ed ? 'editPlant' : 'addPlant')}</div>
+      <div class="form-group"><label class="form-label">${I18n.t('plantName')} <span class="req">*</span></label><input type="text" id="pl-name" placeholder="如：绿萝" value="${Utils.escape(ed ? ed.name : '')}" oninput="GoodsMod.matchPlant()"></div>
+      <div class="form-group"><label class="form-label">${I18n.t('variety')} <span class="text-light" style="font-weight:400;">🧠 输入名称自动识别</span></label><input type="text" id="pl-variety" placeholder="如：天南星科" value="${Utils.escape(ed ? ed.variety : '')}"></div>
+      <div class="two-col">
+        <div class="form-group"><label class="form-label">${I18n.t('buyDate')}</label><input type="date" id="pl-buy" value="${ed ? ed.buyDate : Utils.today()}"></div>
+        <div class="form-group"><label class="form-label">${I18n.t('totalPrice')}</label><input type="number" id="pl-price" value="${ed ? ed.buyPrice : 0}"></div>
+      </div>
+      <div class="two-col">
+        <div class="form-group"><label class="form-label">${I18n.t('waterCycle')}</label><input type="number" id="pl-wcycle" value="${ed ? ed.waterCycle : 7}"></div>
+        <div class="form-group"><label class="form-label">${I18n.t('fertCycle')}</label><input type="number" id="pl-fcycle" value="${ed ? ed.fertilizeCycle : 30}"></div>
+      </div>
+      <div class="form-group"><label class="form-label">${I18n.t('fertAdvice')} <span class="text-light" style="font-weight:400;">🧠 自动填充</span></label><textarea id="pl-fadvise" rows="2" placeholder="输入名称后自动给出施肥建议">${Utils.escape(ed ? (ed.fertilizeAdvice || '') : '')}</textarea></div>
+      <div class="form-group"><label class="form-label">${I18n.t('remark')}</label><input type="text" id="pl-remark" placeholder="如：放在客厅窗台" value="${Utils.escape(ed ? ed.remark : '')}"></div>
+      <div class="modal-actions"><button class="btn-cancel" onclick="App.closeModal()">${I18n.t('cancel')}</button><button class="btn-confirm" onclick="GoodsMod.savePlant(${ed ? ed.id : 'null'})">${I18n.t('save')}</button></div>
+    `);
+    App.ensureDraft('plant',
+      () => ({
+        name: document.getElementById('pl-name')?.value || '',
+        variety: document.getElementById('pl-variety')?.value || '',
+        buy: document.getElementById('pl-buy')?.value || '',
+        price: document.getElementById('pl-price')?.value || '0',
+        wcycle: document.getElementById('pl-wcycle')?.value || '7',
+        fcycle: document.getElementById('pl-fcycle')?.value || '30',
+        fadvise: document.getElementById('pl-fadvise')?.value || '',
+        remark: document.getElementById('pl-remark')?.value || '',
+      }),
+      (d) => {
+        if (d.name != null) document.getElementById('pl-name').value = d.name;
+        if (d.variety != null) document.getElementById('pl-variety').value = d.variety;
+        if (d.buy != null) document.getElementById('pl-buy').value = d.buy;
+        if (d.price != null) document.getElementById('pl-price').value = d.price;
+        if (d.wcycle != null) document.getElementById('pl-wcycle').value = d.wcycle;
+        if (d.fcycle != null) document.getElementById('pl-fcycle').value = d.fcycle;
+        if (d.fadvise != null) document.getElementById('pl-fadvise').value = d.fadvise;
+        if (d.remark != null) document.getElementById('pl-remark').value = d.remark;
+      },
+      () => GoodsMod.addPlant()
+    );
+  },
+
+  savePlant(editId) {
     const name = document.getElementById('pl-name').value.trim();
     if (!name) { App.showToast(I18n.t('fillRequired'), 'error'); return; }
-    Store.add('plants', {
+    const data = {
       name, variety: document.getElementById('pl-variety').value,
       buyDate: document.getElementById('pl-buy').value,
       buyPrice: +document.getElementById('pl-price').value || 0,
-      status: '养护中', deathDate: '',
       remark: document.getElementById('pl-remark').value, images: [],
       waterCycle: +document.getElementById('pl-wcycle').value || 7,
       fertilizeCycle: +document.getElementById('pl-fcycle').value || 30,
+      fertilizeAdvice: document.getElementById('pl-fadvise').value,
       lastWaterDate: '', lastFertilizeDate: ''
-    });
-    Store.logChange('goods', '新增花草', 0, '新增花草: ' + name);
-    App.closeModal(); App.showToast(I18n.t('added'), 'success'); App.render();
+    };
+    if (editId) {
+      const old = Store.find('plants', p => p.id === editId);
+      data.status = old.status; data.deathDate = old.deathDate;
+      data.lastWaterDate = old.lastWaterDate; data.lastFertilizeDate = old.lastFertilizeDate;
+      Store.update('plants', editId, data);
+      Store.logChange('goods', '编辑花草', editId, '编辑花草: ' + name);
+      App.showToast(I18n.t('updated'), 'success');
+    } else {
+      data.status = '养护中'; data.deathDate = '';
+      Store.add('plants', data);
+      Store.logChange('goods', '新增花草', 0, '新增花草: ' + name);
+      App.showToast(I18n.t('added'), 'success');
+    }
+    App.clearDraft('plant');
+    App.closeModal(); App.render();
   },
 
   delPlant(id) {
@@ -551,6 +741,7 @@ const GoodsMod = {
       ${p.status === '枯萎死亡' ? `<div class="label-pair"><span class="lk">枯萎日期</span><span class="vk">${p.deathDate}</span></div>` : ''}
       <div class="label-pair"><span class="lk">浇水周期</span><span class="vk">${p.waterCycle}天（上次：${p.lastWaterDate || '未记录'}）</span></div>
       <div class="label-pair"><span class="lk">施肥周期</span><span class="vk">${p.fertilizeCycle}天（上次：${p.lastFertilizeDate || '未记录'}）</span></div>
+      ${p.fertilizeAdvice ? `<div class="label-pair"><span class="lk">施肥建议</span><span class="vk">${Utils.escape(p.fertilizeAdvice)}</span></div>` : ''}
       ${p.remark ? `<div class="label-pair"><span class="lk">备注</span><span class="vk">${Utils.escape(p.remark)}</span></div>` : ''}
       <div class="divider"></div>
       <div class="flex-between mb-8"><div class="subsection-title" style="margin:0;">养护记录 (${cares.length})</div>${p.status === '养护中' ? `<button class="btn btn-outline btn-sm" onclick="App.closeModal();GoodsMod.singleCare(${id})">+ 养护</button>` : ''}</div>

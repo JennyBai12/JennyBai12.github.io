@@ -84,13 +84,38 @@ const HabitsMod = {
   ICONS: ['🌅','📚','🏃','💧','🧘','🍎','💊','✍️','🎨','🎸','🛏️','🥗','🚶','🧴','🦷','🧹','💰','📷','🎧','🌱'],
   COLORS: ['#829E8E','#C08B7D','#8DA0B8','#B9A48C','#A89BB0','#7FA8A0','#D0A96B','#9BB07F'],
 
-  add() { App.openModal(this.form(null)); this._bindIconEvents(); },
+  add() { App.openModal(this.form(null)); this._bindIconEvents(); this._bindDraft(); },
 
   edit(id) {
     const h = Store.find('habits', x => x.id === id);
     if (!h) return;
     App.openModal(this.form(h));
     this._bindIconEvents();
+    this._bindDraft();
+  },
+
+  _bindDraft() {
+    const g = (id) => document.getElementById(id);
+    App.ensureDraft('habit',
+      () => {
+        const picked = document.querySelector('#habit-icons .icon-opt.active');
+        const colorEl = document.querySelector('#habit-colors .color-opt.active');
+        return {
+          name: g('habit-name')?.value || '',
+          custom: g('habit-icon-custom')?.value || '',
+          icon: picked ? picked.dataset.v : '',
+          color: colorEl ? colorEl.dataset.v : ''
+        };
+      },
+      (d) => {
+        if (d.name != null) g('habit-name').value = d.name;
+        if (d.custom != null) g('habit-icon-custom').value = d.custom;
+        HabitsMod._bindIconEvents();
+        if (d.icon) document.querySelectorAll('#habit-icons .icon-opt').forEach(e => e.classList.toggle('active', e.dataset.v === d.icon));
+        if (d.color) document.querySelectorAll('#habit-colors .color-opt').forEach(e => e.classList.toggle('active', e.dataset.v === d.color));
+      },
+      () => HabitsMod.add()
+    );
   },
 
   form(h) {
@@ -99,10 +124,10 @@ const HabitsMod = {
     const curColor = isEdit ? (h.color || this.COLORS[0]) : this.COLORS[0];
     const isCustomIcon = !this.ICONS.includes(curIcon);
     return `
-      <div class="modal-title">${isEdit ? '✏️ 修改习惯' : '新增习惯'}</div>
-      <div class="form-group"><label class="form-label">习惯名称 <span class="req">*</span></label><input type="text" id="habit-name" placeholder="如：早起" value="${isEdit ? Utils.escape(h.name || '') : ''}"></div>
+      <div class="modal-title">${isEdit ? '✏️ ' + I18n.t('editHabit') : I18n.t('addHabit')}</div>
+      <div class="form-group"><label class="form-label">${I18n.t('habitName')} <span class="req">*</span></label><input type="text" id="habit-name" placeholder="如：早起" value="${isEdit ? Utils.escape(h.name || '') : ''}"></div>
       <div class="form-group">
-        <label class="form-label">图标</label>
+        <label class="form-label">${I18n.t('icon')}</label>
         <div class="icon-picker" id="habit-icons">
           ${this.ICONS.map(ic => `<span class="icon-opt${ic === curIcon ? ' active' : ''}" data-v="${ic}">${ic}</span>`).join('')}
         </div>
@@ -110,7 +135,7 @@ const HabitsMod = {
         <div class="text-sm text-light" style="margin-top:4px;">填写自定义内容后将优先使用自定义图标</div>
       </div>
       <div class="form-group">
-        <label class="form-label">主题色</label>
+        <label class="form-label">${I18n.t('themeColor')}</label>
         <div class="color-picker" id="habit-colors">
           ${this.COLORS.map(cl => `<span class="color-opt${cl === curColor ? ' active' : ''}" data-v="${cl}" style="background:${cl};"></span>`).join('')}
         </div>
@@ -155,6 +180,7 @@ const HabitsMod = {
       Store.logChange('habits', '新增', 0, '新增习惯: ' + name);
       App.showToast(I18n.t('added'), 'success');
     }
+    App.clearDraft('habit');
     App.closeModal();
     App.render();
   },

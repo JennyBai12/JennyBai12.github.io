@@ -105,6 +105,7 @@ const WardrobeMod = {
   add() {
     this._clImage = '';
     App.openModal(this.clothForm(null));
+    this._bindClothDraft();
   },
 
   editCloth(id) {
@@ -112,6 +113,38 @@ const WardrobeMod = {
     if (!cl) return;
     this._clImage = cl.image || '';
     App.openModal(this.clothForm(cl));
+    this._bindClothDraft();
+  },
+
+  _bindClothDraft() {
+    const g = (id) => document.getElementById(id);
+    App.ensureDraft('cloth',
+      () => ({
+        name: g('cl-name')?.value || '',
+        category: g('cl-category')?.value || '',
+        subcat: g('cl-subcat')?.value || '',
+        color: g('cl-color')?.value || '',
+        season: g('cl-season')?.value || '',
+        price: g('cl-price')?.value || '0',
+        date: g('cl-date')?.value || '',
+        image: WardrobeMod._clImage || ''
+      }),
+      (d) => {
+        if (d.name != null) g('cl-name').value = d.name;
+        if (d.category != null) { g('cl-category').value = d.category; WardrobeMod.syncSubCat(); }
+        if (d.subcat != null) g('cl-subcat').value = d.subcat;
+        if (d.color != null) g('cl-color').value = d.color;
+        if (d.season != null) g('cl-season').value = d.season;
+        if (d.price != null) g('cl-price').value = d.price;
+        if (d.date != null) g('cl-date').value = d.date;
+        if (d.image) {
+          WardrobeMod._clImage = d.image;
+          const box = g('cl-img-box');
+          if (box) box.innerHTML = `<div class="img-grid"><div class="img-thumb-wrap"><img class="img-thumb" src="${d.image}"><button class="img-thumb-del" onclick="WardrobeMod.removeClothImg()">✕</button></div></div>`;
+        }
+      },
+      () => WardrobeMod.add()
+    );
   },
 
   clothForm(cl) {
@@ -120,25 +153,25 @@ const WardrobeMod = {
     const curCat = isEdit ? (cl.category || cats[0]) : cats[0];
     const seasons = ['春','夏','秋','冬','四季'];
     return `
-      <div class="modal-title">${isEdit ? '✏️ 修改衣物' : '添加衣物'}</div>
+      <div class="modal-title">${isEdit ? '✏️ ' + I18n.t('editCloth') : I18n.t('addCloth')}</div>
       <div class="form-group">
         <label class="form-label">📷 衣物照片</label>
         <div class="img-upload-area" onclick="WardrobeMod.uploadClothImg()">拍照 / 上传衣物照片（自动识别主色）</div>
         <div id="cl-img-box">${this._clImage ? `<div class="img-grid"><div class="img-thumb-wrap"><img class="img-thumb" src="${this._clImage}"><button class="img-thumb-del" onclick="WardrobeMod.removeClothImg()">✕</button></div></div>` : ''}</div>
         <div id="cl-img-ai"></div>
       </div>
-      <div class="form-group"><label class="form-label">名称 <span class="req">*</span></label><input type="text" id="cl-name" value="${isEdit ? Utils.escape(cl.name || '') : ''}"></div>
+      <div class="form-group"><label class="form-label">${I18n.t('clothName')} <span class="req">*</span></label><input type="text" id="cl-name" value="${isEdit ? Utils.escape(cl.name || '') : ''}"></div>
       <div class="two-col">
-        <div class="form-group"><label class="form-label">大类</label><select id="cl-category" onchange="WardrobeMod.syncSubCat()">${cats.map(c => `<option${c === curCat ? ' selected' : ''}>${c}</option>`).join('')}</select></div>
-        <div class="form-group"><label class="form-label">小类</label><select id="cl-subcat">${(this.CAT_MAP[curCat] || []).map(s => `<option${isEdit && cl.subCategory === s ? ' selected' : ''}>${s}</option>`).join('')}</select></div>
+        <div class="form-group"><label class="form-label">${I18n.t('category')}</label><select id="cl-category" onchange="WardrobeMod.syncSubCat()">${cats.map(c => `<option${c === curCat ? ' selected' : ''}>${c}</option>`).join('')}</select></div>
+        <div class="form-group"><label class="form-label">${I18n.t('subCategory')}</label><select id="cl-subcat">${(this.CAT_MAP[curCat] || []).map(s => `<option${isEdit && cl.subCategory === s ? ' selected' : ''}>${s}</option>`).join('')}</select></div>
       </div>
       <div class="two-col">
-        <div class="form-group"><label class="form-label">颜色</label><input type="text" id="cl-color" list="cl-color-list" value="${isEdit ? Utils.escape(cl.color || '') : ''}" placeholder="如：白色"><datalist id="cl-color-list">${Object.keys(this.COLOR_RGB).map(c => `<option value="${c}">`).join('')}</datalist></div>
-        <div class="form-group"><label class="form-label">季节</label><select id="cl-season">${seasons.map(s => `<option${isEdit && cl.season === s ? ' selected' : ''}>${s}</option>`).join('')}</select></div>
+        <div class="form-group"><label class="form-label">${I18n.t('color')}</label><input type="text" id="cl-color" list="cl-color-list" value="${isEdit ? Utils.escape(cl.color || '') : ''}" placeholder="如：白色"><datalist id="cl-color-list">${Object.keys(this.COLOR_RGB).map(c => `<option value="${c}">`).join('')}</datalist></div>
+        <div class="form-group"><label class="form-label">${I18n.t('season')}</label><select id="cl-season">${seasons.map(s => `<option${isEdit && cl.season === s ? ' selected' : ''}>${s}</option>`).join('')}</select></div>
       </div>
       <div class="two-col">
-        <div class="form-group"><label class="form-label">购入价格</label><input type="number" id="cl-price" value="${isEdit ? (cl.price || 0) : 0}"></div>
-        <div class="form-group"><label class="form-label">购买日期</label><input type="date" id="cl-date" value="${isEdit ? (cl.purchaseDate || Utils.today()) : Utils.today()}"></div>
+        <div class="form-group"><label class="form-label">${I18n.t('totalPrice')}</label><input type="number" id="cl-price" value="${isEdit ? (cl.price || 0) : 0}"></div>
+        <div class="form-group"><label class="form-label">${I18n.t('buyDate')}</label><input type="date" id="cl-date" value="${isEdit ? (cl.purchaseDate || Utils.today()) : Utils.today()}"></div>
       </div>
       <div class="modal-actions">
         <button class="btn-cancel" onclick="App.closeModal()">${I18n.t('cancel')}</button>
@@ -226,6 +259,7 @@ const WardrobeMod = {
       App.showToast(I18n.t('added'), 'success');
     }
     this._clImage = '';
+    App.clearDraft('cloth');
     App.closeModal(); App.render();
   },
 
@@ -300,12 +334,23 @@ const WardrobeMod = {
 
   sellSecondhand(id) {
     App.openModal(`
-      <div class="modal-title">二手处理</div>
-      <div class="form-group"><label class="form-label">处理价格</label><input type="number" id="sh-price" value="0"></div>
-      <div class="form-group"><label class="form-label">处理日期</label><input type="date" id="sh-date" value="${Utils.today()}"></div>
+      <div class="modal-title">${I18n.t('secondhand')}</div>
+      <div class="form-group"><label class="form-label">${I18n.t('totalPrice')}</label><input type="number" id="sh-price" value="0"></div>
+      <div class="form-group"><label class="form-label">${I18n.t('buyDate')}</label><input type="date" id="sh-date" value="${Utils.today()}"></div>
       <div class="text-sm text-light">处理后将自动迁移到二手衣橱，锁定不可修改使用次数。</div>
       <div class="modal-actions"><button class="btn-cancel" onclick="App.closeModal()">${I18n.t('cancel')}</button><button class="btn-danger" onclick="WardrobeMod.confirmSell(${id})">确认处理</button></div>
     `);
+    App.ensureDraft('secondhand_' + id,
+      () => ({
+        price: document.getElementById('sh-price')?.value || '0',
+        date: document.getElementById('sh-date')?.value || ''
+      }),
+      (d) => {
+        if (d.price != null) document.getElementById('sh-price').value = d.price;
+        if (d.date != null) document.getElementById('sh-date').value = d.date;
+      },
+      () => WardrobeMod.sellSecondhand(id)
+    );
   },
 
   confirmSell(id) {
@@ -314,6 +359,7 @@ const WardrobeMod = {
       secondhandPrice: +document.getElementById('sh-price').value,
       secondhandDate: document.getElementById('sh-date').value,
     });
+    App.clearDraft('secondhand_' + id);
     Store.logChange('wardrobe', '二手处理', id, '衣物二手处理');
     App.closeModal(); App.showToast('已迁移到二手衣橱', 'success'); App.render();
   },
@@ -368,7 +414,7 @@ const WardrobeMod = {
     this._pickerSearch = '';
     this._collapsed = {};
     App.openModal(`
-      <div class="modal-title">➕ 穿搭打卡</div>
+      <div class="modal-title">➕ ${I18n.t('outfitCheckin')}</div>
       <div class="form-group"><label class="form-label">📷 上传今日穿搭照片（可多选）</label>
         <div class="img-upload-area" onclick="WardrobeMod.uploadOutfit()">拍照 / 上传照片</div>
         <div id="outfit-imgs"></div>
@@ -385,6 +431,23 @@ const WardrobeMod = {
       <div class="modal-actions"><button class="btn-cancel" onclick="App.closeModal()">${I18n.t('cancel')}</button><button class="btn-confirm" onclick="WardrobeMod.saveOutfit()">保存打卡</button></div>
     `);
     this.renderOutfitPicker();
+    App.ensureDraft('outfit',
+      () => ({
+        note: document.getElementById('outfit-note')?.value || '',
+        matched: WardrobeMod._outfitClothes || [],
+        images: WardrobeMod._outfitImages || []
+      }),
+      (d) => {
+        if (d.note != null) { const t = document.getElementById('outfit-note'); if (t) t.value = d.note; }
+        if (Array.isArray(d.matched)) { WardrobeMod._outfitClothes = d.matched; WardrobeMod.renderOutfitPicker(); }
+        if (Array.isArray(d.images) && d.images.length) {
+          WardrobeMod._outfitImages = d.images;
+          const box = document.getElementById('outfit-imgs');
+          if (box) box.innerHTML = d.images.map(src => `<img class="img-thumb" src="${src}" onclick="App.openImageViewer('${src}')">`).join('');
+        }
+      },
+      () => WardrobeMod.addOutfit()
+    );
   },
 
   onPickerSearch(v) {
@@ -592,6 +655,7 @@ const WardrobeMod = {
       Store.add('outfits', { date: today, images, matchedClothes: matched, note, analysis });
       matched.forEach(id => { const cl = Store.find('clothes', c => c.id === id); if (cl) Store.update('clothes', id, { annualCount: cl.annualCount + 1, totalCount: cl.totalCount + 1 }); });
     }
+    App.clearDraft('outfit');
     App.closeModal(); App.showToast('穿搭打卡成功', 'success'); App.render();
   },
 

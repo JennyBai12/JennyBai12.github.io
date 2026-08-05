@@ -210,6 +210,7 @@ const StudyMod = {
           </div>
           <div class="flex gap-8">
             <button class="btn btn-outline btn-sm" onclick="StudyMod.bookDetail(${b.id})">详情</button>
+            <button class="btn btn-outline btn-sm" onclick="StudyMod.editBook(${b.id})">编辑</button>
             <button class="btn btn-cancel btn-sm" onclick="StudyMod.delBook(${b.id})">✕</button>
           </div>
         </div>
@@ -285,20 +286,27 @@ const StudyMod = {
           </div>
         </div>
       `).join('') || '<div class="text-light text-sm">暂无读后感</div>'}
-      <div class="modal-actions"><button class="btn-cancel" onclick="App.closeModal()">${I18n.t('close')}</button></div>
+      <div class="modal-actions"><button class="btn btn-outline btn-sm" onclick="App.closeModal();StudyMod.editBook(${id})">编辑书籍</button><button class="btn-cancel" onclick="App.closeModal()">${I18n.t('close')}</button></div>
     `);
   },
 
-  addBook() {
+  addBook(editId) {
+    const ed = editId ? Store.find('books', b => b.id === editId) : null;
     App.openModal(`
-      <div class="modal-title">添加书籍</div>
-      <div class="form-group"><label class="form-label">书名 <span class="req">*</span></label><input type="text" id="bk-title"></div>
-      <div class="form-group"><label class="form-label">作者</label><input type="text" id="bk-author"></div>
-      <div class="form-group"><label class="form-label">分类</label><input type="text" id="bk-category" placeholder="如：设计、编程"></div>
-      <div class="form-group"><label class="form-label">状态</label><select id="bk-status"><option>待阅读</option><option>在读</option><option>已读完</option><option>弃读</option></select></div>
-      <div class="form-group"><label class="form-label">开始日期</label><input type="date" id="bk-start" value="${Utils.today()}"></div>
-      <div class="modal-actions"><button class="btn-cancel" onclick="App.closeModal()">${I18n.t('cancel')}</button><button class="btn-confirm" onclick="StudyMod.saveBook()">${I18n.t('save')}</button></div>
+      <div class="modal-title">${ed ? '编辑书籍' : '添加书籍'}</div>
+      <div class="form-group"><label class="form-label">书名 <span class="req">*</span></label><input type="text" id="bk-title" value="${Utils.escape(ed ? ed.title : '')}"></div>
+      <div class="form-group"><label class="form-label">作者</label><input type="text" id="bk-author" value="${Utils.escape(ed ? ed.author : '')}"></div>
+      <div class="form-group"><label class="form-label">${I18n.t('bookCategory')}（可多选标签，已自动记忆）</label>${App.suggestInput({ id: 'bk-category', value: ed ? ed.category : '', placeholder: '输入即联想历史分类，可多选，逗号分隔', className: '' })}</div>
+      <div class="form-group"><label class="form-label">状态</label><select id="bk-status"><option${ed && ed.status === '待阅读' ? ' selected' : ''}>待阅读</option><option${ed && ed.status === '在读' ? ' selected' : ''}>在读</option><option${ed && ed.status === '已读完' ? ' selected' : ''}>已读完</option><option${ed && ed.status === '弃读' ? ' selected' : ''}>弃读</option></select></div>
+      <div class="form-group"><label class="form-label">开始日期</label><input type="date" id="bk-start" value="${ed ? ed.startDate : Utils.today()}"></div>
+      <div class="modal-actions"><button class="btn-cancel" onclick="App.closeModal()">${I18n.t('cancel')}</button><button class="btn-confirm" onclick="StudyMod.saveBook(${ed ? ed.id : 'null'})">${I18n.t('save')}</button></div>
     `);
+    if (ed && ed.category) {
+      const g = document.getElementById('bk-category');
+      if (g) { g.value = ed.category; App.bindSuggest('bk-category', Store.historyOf('bookCategories'), { multi: true, historyKey: 'bookCategories' }); }
+    } else {
+      App.bindSuggest('bk-category', Store.historyOf('bookCategories'), { multi: true, historyKey: 'bookCategories' });
+    }
     App.ensureDraft('book',
       () => ({
         title: document.getElementById('bk-title')?.value || '',
@@ -318,19 +326,32 @@ const StudyMod = {
     );
   },
 
-  saveBook() {
+  saveBook(editId) {
     const title = document.getElementById('bk-title').value.trim();
     if (!title) { App.showToast(I18n.t('fillRequired'), 'error'); return; }
     const status = document.getElementById('bk-status').value;
-    Store.add('books', {
+    const category = document.getElementById('bk-category').value;
+    if (category) Store.rememberInput('bookCategories', category);
+    const data = {
       title, author: document.getElementById('bk-author').value,
-      category: document.getElementById('bk-category').value,
+      category,
       startDate: document.getElementById('bk-start').value, endDate: '',
       progress: status === '已读完' ? 100 : 0, status, rating: 0, cover: ''
-    });
+    };
+    if (editId) {
+      const old = Store.find('books', b => b.id === editId);
+      data.rating = old.rating; data.endDate = old.endDate; data.cover = old.cover;
+      Store.update('books', editId, data);
+      App.showToast(I18n.t('updated'), 'success');
+    } else {
+      Store.add('books', data);
+      App.showToast(I18n.t('added'), 'success');
+    }
     App.clearDraft('book');
-    App.closeModal(); App.showToast(I18n.t('added'), 'success'); App.render();
+    App.closeModal(); App.render();
   },
+
+  editBook(id) { this.addBook(id); },
 
   delBook(id) {
     App.confirm(I18n.t('confirmDelete'), () => {
