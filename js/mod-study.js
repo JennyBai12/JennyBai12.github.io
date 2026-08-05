@@ -5,8 +5,10 @@ const StudyMod = {
   subTab: 'records',
   /* 学习记录 / 阅读管理 的日期与时间段搜索状态 */
   recordsFrom: '', recordsTo: '', recordsQuick: 'all', recordsText: '',
-  bookFrom: '', bookTo: '', bookQuick: 'all', bookStatusFilter: 'all',
+  bookFrom: '', bookTo: '', bookQuick: 'all', bookStatusFilter: 'all', bookText: '', bookRating: 'all',
   _bookBase: [],
+  /* 影音记录的搜索 / 时间段 / 评分 / 统计下钻状态 */
+  mediaFrom: '', mediaTo: '', mediaQuick: 'all', mediaRating: 'all', mediaStat: 'all',
 
   render(c) {
     c.innerHTML = `
@@ -37,6 +39,16 @@ const StudyMod = {
       return { label: d.slice(5), value: total };
     });
     const hasFilter = this.recordsFrom || this.recordsTo || this.recordsText;
+    const totalDur = records.reduce((s, r) => s + (r.duration || 0), 0);
+    const daysSpan = (() => {
+      if (!records.length) return 0;
+      const ds = [...new Set(records.map(r => r.date))].sort();
+      return Utils.daysBetween(ds[0], ds[ds.length - 1]) + 1;
+    })();
+    const avgDaily = daysSpan ? Math.round(totalDur / daysSpan) : 0;
+    const byType = {};
+    records.forEach(r => { if (r.type) byType[r.type] = (byType[r.type] || 0) + (r.duration || 0); });
+    const topType = Object.entries(byType).sort((a, b) => b[1] - a[1])[0];
 
     document.getElementById('study-sub').innerHTML = `
       <div class="flex-between mb-12">
@@ -44,6 +56,17 @@ const StudyMod = {
         <button class="btn btn-primary btn-sm" onclick="StudyMod.addRecord()">+ 新增</button>
       </div>
       <div class="chart-box"><div class="chart-title">近7天学习时长（分钟）</div>${Charts.line(chartData)}</div>
+
+      <div class="summary-card mb-12">
+        <div class="summary-title">📊 汇总（当前${hasFilter ? '筛选' : '全部'} ${records.length} 条）</div>
+        <div class="dash-grid">
+          <div class="dash-stat"><div class="dash-stat-num">${records.length}</div><div class="dash-stat-label">记录数</div></div>
+          <div class="dash-stat"><div class="dash-stat-num">${totalDur}</div><div class="dash-stat-label">总时长(分)</div></div>
+          <div class="dash-stat"><div class="dash-stat-num">${daysSpan}</div><div class="dash-stat-label">覆盖天数</div></div>
+          <div class="dash-stat"><div class="dash-stat-num">${avgDaily}</div><div class="dash-stat-label">日均(分)</div></div>
+        </div>
+        <div class="summary-sub">${topType ? '最活跃类型：' + topType[0] + '（' + topType[1] + ' 分钟）' : '暂无数据'}</div>
+      </div>
 
       <div class="filter-bar">
         <div class="filter-tab ${this.recordsQuick==='all'?'active':''}" onclick="StudyMod.setRecordsQuick('all')">全部</div>
@@ -137,28 +160,42 @@ const StudyMod = {
 
   /* ===== 阅读管理 ===== */
   renderReading() {
-    let books = Store.get('books');
+    const allBooks = Store.get('books');
+    const plan = Store.get('annual_reading_plans').find(p => p.year === new Date().getFullYear());
+    const allFinished = allBooks.filter(b => b.status === '已读完').length;
+    const allReading = allBooks.filter(b => b.status === '在读').length;
+    const allPending = allBooks.filter(b => b.status === '待阅读').length;
+    const goalGap = plan ? Math.max(0, plan.totalGoal - allFinished) : 0;
+
+    // 日期 + 关键词 + 评分 过滤得到本轮书库基准
+    let books = allBooks;
     if (this.bookFrom) books = books.filter(b => (b.startDate||'') && (b.startDate||'') >= this.bookFrom);
     if (this.bookTo) books = books.filter(b => (b.startDate||'') && (b.startDate||'') <= this.bookTo);
+    books = this._applyBookTextRating(books);
     this._bookBase = books;
-    const plan = Store.get('annual_reading_plans').find(p => p.year === new Date().getFullYear());
-    const finished = books.filter(b => b.status === '已读完').length;
-    const reading = books.filter(b => b.status === '在读').length;
-    const pending = books.filter(b => b.status === '待阅读').length;
-    const goalGap = plan ? Math.max(0, plan.totalGoal - finished) : 0;
+
+    const totalCost = 0; // 书籍无金额字段，仅汇总数量与评分
+    const ratedCount = allBooks.filter(b => (b.rating || 0) > 0).length;
+    const avgRating = ratedCount ? (allBooks.reduce((s, b) => s + (b.rating || 0), 0) / ratedCount) : 0;
+    const hasFilter = this.bookFrom || this.bookTo || this.bookText || this.bookRating !== 'all' || this.bookStatusFilter !== 'all';
 
     document.getElementById('study-sub').innerHTML = `
       ${plan ? `
       <div class="card card-accent">
         <div class="card-title" style="color:#fff;">📅 ${new Date().getFullYear()}年度阅读计划</div>
         <div class="flex-between" style="color:#fff;">
-          <div class="text-center"><div class="text-bold" style="font-size:24px;">${finished}</div><div style="font-size:11px;opacity:0.8;">已读</div></div>
-          <div class="text-center"><div class="text-bold" style="font-size:24px;">${reading}</div><div style="font-size:11px;opacity:0.8;">在读</div></div>
-          <div class="text-center"><div class="text-bold" style="font-size:24px;">${pending}</div><div style="font-size:11px;opacity:0.8;">待读</div></div>
+          <div class="text-center"><div class="text-bold" style="font-size:24px;">${allFinished}</div><div style="font-size:11px;opacity:0.8;">已读</div></div>
+          <div class="text-center"><div class="text-bold" style="font-size:24px;">${allReading}</div><div style="font-size:11px;opacity:0.8;">在读</div></div>
+          <div class="text-center"><div class="text-bold" style="font-size:24px;">${allPending}</div><div style="font-size:11px;opacity:0.8;">待读</div></div>
           <div class="text-center"><div class="text-bold" style="font-size:24px;">${goalGap}</div><div style="font-size:11px;opacity:0.8;">缺口</div></div>
         </div>
-        <div class="mt-12">${Charts.progress(finished, plan.totalGoal)}</div>
+        <div class="mt-12">${Charts.progress(allFinished, plan.totalGoal)}</div>
       </div>` : ''}
+
+      <div class="summary-card mb-12">
+        <div class="summary-title">📊 阅读汇总（全部 ${allBooks.length} 本）</div>
+        <div class="summary-sub">已读 ${allFinished} · 在读 ${allReading} · 待读 ${allPending} · 弃读 ${allBooks.filter(b => b.status === '弃读').length} · 平均评分 ${avgRating.toFixed(1)}⭐（${ratedCount} 本评分）</div>
+      </div>
 
       <div class="flex-between mb-12 mt-16">
         <div class="subsection-title" style="margin:0;">书库</div>
@@ -166,6 +203,18 @@ const StudyMod = {
           <button class="btn btn-outline btn-sm" onclick="StudyMod.editPlan()">年度计划</button>
           <button class="btn btn-primary btn-sm" onclick="StudyMod.addBook()">+ 添加</button>
         </div>
+      </div>
+
+      <div class="search-bar mb-12">
+        <input type="text" class="search-input" placeholder="搜索书名 / 作者 / 分类..." value="${Utils.escape(this.bookText)}" oninput="StudyMod.onBookText(this.value)">
+        <select class="mini-select" onchange="StudyMod.setBookRating(this.value)">
+          <option value="all" ${this.bookRating === 'all' ? 'selected' : ''}>全部评分</option>
+          <option value="high" ${this.bookRating === 'high' ? 'selected' : ''}>高分 ≥4⭐</option>
+          <option value="mid" ${this.bookRating === 'mid' ? 'selected' : ''}>中评 3⭐</option>
+          <option value="low" ${this.bookRating === 'low' ? 'selected' : ''}>低评 ≤2⭐</option>
+          <option value="none" ${this.bookRating === 'none' ? 'selected' : ''}>未评</option>
+        </select>
+        <button class="btn-cancel btn-mini" onclick="StudyMod.resetBookFilter()">清除</button>
       </div>
 
       <div class="filter-bar">
@@ -180,7 +229,6 @@ const StudyMod = {
           <span class="date-sep">~</span>
           <input type="date" class="date-input" value="${this.bookTo}" onchange="StudyMod.setBookTo(this.value)" title="结束日期">
         </div>
-        ${(this.bookFrom||this.bookTo) ? `<span class="link-reset" onclick="StudyMod.resetBookFilter()">清除</span>` : ''}
       </div>
 
       <div class="filter-bar" id="book-status-bar">
@@ -191,8 +239,32 @@ const StudyMod = {
         <div class="filter-tab ${this.bookStatusFilter==='弃读'?'active':''}" onclick="StudyMod.filterBooks('弃读')">弃读</div>
       </div>
 
+      ${hasFilter ? `<div class="filter-tip">当前筛选：${books.length} 本${this.bookText ? ' · 含「' + Utils.escape(this.bookText) + '」' : ''}${this.bookRating !== 'all' ? ' · 评分筛选' : ''} <span class="link-reset" onclick="StudyMod.resetBookFilter()">清除</span></div>` : ''}
+
       <div id="book-list">${this.renderBookList(books)}</div>
     `;
+  },
+
+  /* 在已日期过滤的列表上再叠加「状态 + 关键词 + 评分」 */
+  _applyBookTextRating(list) {
+    let out = list.slice();
+    if (this.bookText) {
+      const q = this.bookText.toLowerCase();
+      out = out.filter(b => (b.title || '').toLowerCase().includes(q) || (b.author || '').toLowerCase().includes(q) || (b.category || '').toLowerCase().includes(q));
+    }
+    if (this.bookRating !== 'all') {
+      if (this.bookRating === 'none') out = out.filter(b => !(b.rating > 0));
+      else if (this.bookRating === 'high') out = out.filter(b => (b.rating || 0) >= 4);
+      else if (this.bookRating === 'mid') out = out.filter(b => (b.rating || 0) === 3);
+      else if (this.bookRating === 'low') out = out.filter(b => (b.rating || 0) > 0 && (b.rating || 0) <= 2);
+    }
+    return out;
+  },
+
+  onBookText(v) {
+    this.bookText = v;
+    const el = document.getElementById('book-list');
+    if (el) el.innerHTML = this.renderBookList(this._applyBookTextRating(this._bookBase || Store.get('books')));
   },
 
   renderBookList(books) {
@@ -225,7 +297,8 @@ const StudyMod = {
   filterBooks(status) {
     this.bookStatusFilter = status;
     const base = this._bookBase || Store.get('books');
-    const books = status === 'all' ? base : base.filter(b => b.status === status);
+    const list = this._applyBookTextRating(base);
+    const books = status === 'all' ? list : list.filter(b => b.status === status);
     document.getElementById('book-list').innerHTML = this.renderBookList(books);
     document.querySelectorAll('#book-status-bar .filter-tab').forEach(t => {
       const label = t.textContent.trim();
@@ -243,7 +316,8 @@ const StudyMod = {
   },
   setBookFrom(v) { this.bookFrom = v; this.bookQuick = ''; App.render(); },
   setBookTo(v) { this.bookTo = v; this.bookQuick = ''; App.render(); },
-  resetBookFilter() { this.bookFrom = ''; this.bookTo = ''; this.bookQuick = 'all'; this.bookStatusFilter = 'all'; App.render(); },
+  setBookRating(v) { this.bookRating = v; App.render(); },
+  resetBookFilter() { this.bookFrom = ''; this.bookTo = ''; this.bookQuick = 'all'; this.bookStatusFilter = 'all'; this.bookText = ''; this.bookRating = 'all'; App.render(); },
 
   bookDetail(id) {
     const book = Store.find('books', b => b.id === id);
@@ -620,44 +694,157 @@ const StudyMod = {
 
   renderMedia() {
     const all = Store.get('media');
-    let items = all;
-    if (this.mediaFilter !== 'all') items = items.filter(m => m.category === this.mediaFilter);
-    if (this.mediaSearch) {
-      const q = this.mediaSearch.toLowerCase();
-      items = items.filter(m => (m.title || '').toLowerCase().includes(q) || (m.tags || '').toLowerCase().includes(q));
-    }
-    items = items.sort((a, b) => (b.startDate || '').localeCompare(a.startDate || ''));
+    const items = this._filterMedia(all)
+      .sort((a, b) => (b.startDate || '').localeCompare(a.startDate || ''));
 
-    const finished = all.filter(m => m.status === '已看完');
-    const totalCost = all.reduce((s, m) => s + (m.cost || 0), 0);
-    const highRated = all.filter(m => m.rating >= 4);
-    const monthNew = all.filter(m => (m.startDate || '').startsWith(Utils.today().slice(0, 7)));
+    /* 汇总（基于全部数据，作为总览） */
+    const finishedAll = all.filter(m => m.status === '已看完');
+    const highRatedAll = all.filter(m => m.rating >= 4);
+    const totalCostAll = all.reduce((s, m) => s + (m.cost || 0), 0);
+    const costByCat = {};
+    all.forEach(m => { if ((m.cost || 0) > 0) costByCat[m.category] = (costByCat[m.category] || 0) + m.cost; });
+    const avgRating = all.length ? (all.reduce((s, m) => s + (m.rating || 0), 0) / all.length) : 0;
+    const ratedCount = all.filter(m => m.rating > 0).length;
+
+    /* 当前筛选范围内的汇总（随时间段/评分变化） */
+    const filteredCost = items.reduce((s, m) => s + (m.cost || 0), 0);
+    const filteredFinished = items.filter(m => m.status === '已看完').length;
+    const filteredHigh = items.filter(m => m.rating >= 4).length;
+    const hasFilter = this.mediaFrom || this.mediaTo || this.mediaRating !== 'all' || this.mediaStat !== 'all' || this.mediaFilter !== 'all' || this.mediaSearch;
 
     document.getElementById('study-sub').innerHTML = `
-      <div class="dash-grid">
-        <div class="dash-stat"><div class="dash-stat-num">${all.length}</div><div class="dash-stat-label">总观影</div></div>
-        <div class="dash-stat"><div class="dash-stat-num">${finished.length}</div><div class="dash-stat-label">已看完</div></div>
-        <div class="dash-stat"><div class="dash-stat-num">¥${totalCost.toFixed(0)}</div><div class="dash-stat-label">总花销</div></div>
-        <div class="dash-stat"><div class="dash-stat-num">${highRated.length}</div><div class="dash-stat-label">高分(≥4⭐)</div></div>
+      <div class="summary-card mb-12">
+        <div class="summary-title">📊 汇总（全部 ${all.length} 条）</div>
+        <div class="dash-grid">
+          <div class="dash-stat stat-click ${this.mediaStat === 'all' ? 'stat-active' : ''}" onclick="StudyMod.setMediaStat('all')">
+            <div class="dash-stat-num">${all.length}</div><div class="dash-stat-label">总观影</div></div>
+          <div class="dash-stat stat-click ${this.mediaStat === 'finished' ? 'stat-active' : ''}" onclick="StudyMod.setMediaStat('finished')">
+            <div class="dash-stat-num">${finishedAll.length}</div><div class="dash-stat-label">已看完</div></div>
+          <div class="dash-stat stat-click ${this.mediaStat === 'cost' ? 'stat-active' : ''}" onclick="StudyMod.mediaCostDetail()">
+            <div class="dash-stat-num">¥${totalCostAll.toFixed(0)}</div><div class="dash-stat-label">总花销 · 点击看明细</div></div>
+          <div class="dash-stat stat-click ${this.mediaStat === 'high' ? 'stat-active' : ''}" onclick="StudyMod.setMediaStat('high')">
+            <div class="dash-stat-num">${highRatedAll.length}</div><div class="dash-stat-label">高分(≥4⭐)</div></div>
+        </div>
+        <div class="summary-sub">平均评分 ${avgRating.toFixed(1)}⭐（${ratedCount} 部评分） · 分类花销：${Object.keys(costByCat).length ? Object.entries(costByCat).map(([k, v]) => k + ' ¥' + v.toFixed(0)).join(' / ') : '—'}</div>
       </div>
 
       <div class="flex-between mb-12 mt-12">
-        <input type="text" class="search-input" placeholder="搜索作品名/标签..." value="${Utils.escape(this.mediaSearch)}" oninput="StudyMod.mediaSearch=this.value" style="flex:1;margin-right:8px;">
+        <input type="text" class="search-input flex-1" placeholder="搜索作品名/标签..." value="${Utils.escape(this.mediaSearch)}" oninput="StudyMod.onMediaSearch(this.value)" style="margin-right:8px;">
         <button class="btn btn-primary btn-sm" onclick="StudyMod.addMedia()">+ 添加</button>
       </div>
 
-      <div class="filter-bar">
-        <div class="filter-tab ${this.mediaFilter === 'all' ? 'active' : ''}" onclick="StudyMod.setMediaFilter('all')">全部</div>
+      <div class="search-bar mb-12">
+        <div class="filter-bar" style="flex-wrap:wrap;gap:6px;">
+          <div class="filter-tab ${this.mediaQuick === 'all' ? 'active' : ''}" onclick="StudyMod.setMediaQuick('all')">全部时间</div>
+          <div class="filter-tab ${this.mediaQuick === '7' ? 'active' : ''}" onclick="StudyMod.setMediaQuick('7')">近7天</div>
+          <div class="filter-tab ${this.mediaQuick === '30' ? 'active' : ''}" onclick="StudyMod.setMediaQuick('30')">近30天</div>
+          <div class="filter-tab ${this.mediaQuick === 'year' ? 'active' : ''}" onclick="StudyMod.setMediaQuick('year')">今年</div>
+        </div>
+        <div class="filter-bar mt-8" style="gap:6px;">
+          <select class="mini-select" onchange="StudyMod.setMediaRating(this.value)">
+            <option value="all" ${this.mediaRating === 'all' ? 'selected' : ''}>全部评分</option>
+            <option value="5" ${this.mediaRating === '5' ? 'selected' : ''}>★★★★★ 5星</option>
+            <option value="4" ${this.mediaRating === '4' ? 'selected' : ''}>★★★★ 4星以上</option>
+            <option value="3" ${this.mediaRating === '3' ? 'selected' : ''}>★★★ 3星以上</option>
+            <option value="2" ${this.mediaRating === '2' ? 'selected' : ''}>★★ 2星以上</option>
+            <option value="1" ${this.mediaRating === '1' ? 'selected' : ''}>★ 1星以上</option>
+            <option value="0" ${this.mediaRating === '0' ? 'selected' : ''}>未评分</option>
+          </select>
+        </div>
+        <div class="date-range mt-8">
+          <input type="date" class="date-input" value="${this.mediaFrom}" onchange="StudyMod.setMediaFrom(this.value)" title="开始日期">
+          <span class="date-sep">~</span>
+          <input type="date" class="date-input" value="${this.mediaTo}" onchange="StudyMod.setMediaTo(this.value)" title="结束日期">
+        </div>
+      </div>
+
+      <div class="filter-bar mb-12">
+        <div class="filter-tab ${this.mediaFilter === 'all' ? 'active' : ''}" onclick="StudyMod.setMediaFilter('all')">全部品类</div>
         <div class="filter-tab ${this.mediaFilter === '电影' ? 'active' : ''}" onclick="StudyMod.setMediaFilter('电影')">电影</div>
         <div class="filter-tab ${this.mediaFilter === '电视剧' ? 'active' : ''}" onclick="StudyMod.setMediaFilter('电视剧')">电视剧</div>
         <div class="filter-tab ${this.mediaFilter === '纪录片' ? 'active' : ''}" onclick="StudyMod.setMediaFilter('纪录片')">纪录片</div>
         <div class="filter-tab ${this.mediaFilter === '综艺' ? 'active' : ''}" onclick="StudyMod.setMediaFilter('综艺')">综艺</div>
       </div>
 
+      ${hasFilter ? `<div id="media-tip" class="filter-tip">当前筛选：${items.length} 条 · 花销 ¥${filteredCost.toFixed(0)} · 已看完 ${filteredFinished} · 高分 ${filteredHigh} <span class="link-reset" onclick="StudyMod.resetMediaFilter()">清除</span></div>` : '<div id="media-tip"></div>'}
+
       <div id="media-list">
         ${items.map(m => this.renderMediaCard(m)).join('') || '<div class="empty-state"><div class="empty-icon">🎬</div>暂无影音记录</div>'}
       </div>
     `;
+  },
+
+  _filterMedia(list) {
+    let items = list.slice();
+    if (this.mediaFilter && this.mediaFilter !== 'all') items = items.filter(m => m.category === this.mediaFilter);
+    if (this.mediaSearch) {
+      const q = this.mediaSearch.toLowerCase();
+      items = items.filter(m => (m.title || '').toLowerCase().includes(q) || (m.tags || '').toLowerCase().includes(q));
+    }
+    if (this.mediaRating !== 'all') {
+      if (this.mediaRating === '0') items = items.filter(m => !m.rating || m.rating === 0);
+      else items = items.filter(m => (m.rating || 0) >= +this.mediaRating);
+    }
+    if (this.mediaStat === 'finished') items = items.filter(m => m.status === '已看完');
+    else if (this.mediaStat === 'high') items = items.filter(m => (m.rating || 0) >= 4);
+    if (this.mediaFrom) items = items.filter(m => (m.startDate || '') >= this.mediaFrom);
+    if (this.mediaTo) items = items.filter(m => (m.startDate || '') <= this.mediaTo);
+    return items;
+  },
+
+  onMediaSearch(v) {
+    this.mediaSearch = v; this.mediaQuick = '';
+    const items = this._filterMedia(Store.get('media'))
+      .sort((a, b) => (b.startDate || '').localeCompare(a.startDate || ''));
+    const filteredCost = items.reduce((s, m) => s + (m.cost || 0), 0);
+    const filteredFinished = items.filter(m => m.status === '已看完').length;
+    const filteredHigh = items.filter(m => m.rating >= 4).length;
+    const hasFilter = this.mediaFrom || this.mediaTo || this.mediaRating !== 'all' || this.mediaStat !== 'all' || this.mediaFilter !== 'all' || this.mediaSearch;
+    const listEl = document.getElementById('media-list');
+    if (listEl) listEl.innerHTML = items.map(m => this.renderMediaCard(m)).join('') || '<div class="empty-state"><div class="empty-icon">🎬</div>暂无影音记录</div>';
+    const tipEl = document.getElementById('media-tip');
+    if (tipEl) tipEl.outerHTML = hasFilter
+      ? `<div id="media-tip" class="filter-tip">当前筛选：${items.length} 条 · 花销 ¥${filteredCost.toFixed(0)} · 已看完 ${filteredFinished} · 高分 ${filteredHigh} <span class="link-reset" onclick="StudyMod.resetMediaFilter()">清除</span></div>`
+      : '<div id="media-tip"></div>';
+  },
+  setMediaQuick(q) {
+    this.mediaQuick = q; this.mediaFrom = ''; this.mediaTo = '';
+    if (q === '7') { this.mediaFrom = Utils.addDays(Utils.today(), -6); this.mediaTo = Utils.today(); }
+    else if (q === '30') { this.mediaFrom = Utils.addDays(Utils.today(), -29); this.mediaTo = Utils.today(); }
+    else if (q === 'year') { this.mediaFrom = Utils.yearStart(); this.mediaTo = ''; }
+    App.render();
+  },
+  setMediaFrom(v) { this.mediaFrom = v; this.mediaQuick = ''; App.render(); },
+  setMediaTo(v) { this.mediaTo = v; this.mediaQuick = ''; App.render(); },
+  setMediaRating(v) { this.mediaRating = v; App.render(); },
+  setMediaStat(s) { this.mediaStat = (this.mediaStat === s && s !== 'cost') ? 'all' : s; App.render(); },
+  resetMediaFilter() {
+    this.mediaSearch = ''; this.mediaFrom = ''; this.mediaTo = ''; this.mediaQuick = 'all';
+    this.mediaRating = 'all'; this.mediaStat = 'all'; this.mediaFilter = 'all';
+    App.render();
+  },
+
+  /* 总花销明细：按分类汇总 + 列出有花费的单条记录 */
+  mediaCostDetail() {
+    const all = Store.get('media').filter(m => (m.cost || 0) > 0);
+    const byCat = {};
+    all.forEach(m => { byCat[m.category] = (byCat[m.category] || 0) + m.cost; });
+    const total = all.reduce((s, m) => s + m.cost, 0);
+    App.openModal(`
+      <div class="modal-title">💰 影音总花销明细</div>
+      <div class="card-title">合计 ¥${total.toFixed(2)}</div>
+      <div class="card mb-12">
+        ${Object.entries(byCat).map(([k, v]) => `<div class="label-pair"><span class="lk">${k}</span><span class="vk">¥${v.toFixed(2)}</span></div>`).join('') || '<div class="text-light text-sm">暂无花费记录</div>'}
+      </div>
+      <div class="subsection-title">逐条记录（${all.length}）</div>
+      ${all.length ? all.sort((a, b) => (b.startDate || '').localeCompare(a.startDate || '')).map(m => `
+        <div class="list-item">
+          <div class="list-icon">🎬</div>
+          <div class="list-body"><div class="list-title">${Utils.escape(m.title)}</div><div class="list-meta">${m.category} · ${m.startDate || ''}</div></div>
+          <div class="text-bold">¥${m.cost.toFixed(2)}</div>
+        </div>`).join('') : '<div class="text-light text-sm">暂无花费记录</div>'}
+      <div class="modal-actions"><button class="btn-confirm" onclick="App.closeModal()">关闭</button></div>
+    `);
   },
 
   renderMediaCard(m) {

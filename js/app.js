@@ -16,7 +16,7 @@ const App = {
     { id: 'reminders', icon: '⏰', label: 'reminders' },
     { id: 'calendar', icon: '📅', label: 'calendar' },
   ],
-  APP_VERSION: 'v34',
+  APP_VERSION: 'v35',
 
   /* 版本更新说明：新版本上线后首次打开自动弹窗展示，并同步推送至收件箱 */
   CHANGELOG: {
@@ -62,6 +62,13 @@ const App = {
       '📝 误触保护扩展到全模块：物资 / 习惯 / 衣橱（衣物、穿搭打卡、二手处理）等所有手动输入表单，未保存误触退出自动存草稿，下次进入可继续编辑',
       '📚 阅读管理全面可编辑：书籍新增「编辑」按钮（详情页与卡片均可改），书籍「分类」改为可多选标签并自动记忆历史标签',
       '🌐 修复英文模式下部分字段不翻译的问题：切换语言后动态渲染内容也会重新翻译，并补全物资 / 习惯 / 衣橱 / 花草表单的中英双语'
+    ],
+    'v35': [
+      '🕐 统一全站时间为北京时间（UTC+8）：热点抓取时间、版本更新邮件 / 收件箱时间、日志时间等均按北京时间显示，不再受浏览器本地时区影响',
+      '🎬 影音记录新增「汇总」面板：总观影 / 已看完 / 总花销 / 高分 四个统计卡可点击下钻（点「总花销」看分类明细与逐条花费，「已看完」「高分」直接筛选）',
+      '🎬 影音记录新增「按日期 / 时间段搜索 + 评分下拉筛选」：快捷时段（全部 / 近7天 / 近30天 / 今年）+ 自定义起止日期 + 评分（全部 / 5星 / 4星以上 / 3星以上 / 2星以上 / 1星以上 / 未评）',
+      '📚 阅读管理新增「搜索栏 + 评分下拉 + 汇总」：可按书名 / 作者 / 分类关键词搜索，按评分筛选（高分 ≥4⭐ / 中评 3⭐ / 低评 ≤2⭐ / 未评），并展示阅读汇总（共 N 本 · 已读 / 在读 / 待读 / 弃读 · 平均评分）',
+      '📖 学习记录新增「汇总」面板：当前筛选下的记录数、总时长、覆盖天数、日均时长，以及最活跃类型'
     ]
   },
 
@@ -1110,7 +1117,7 @@ const App = {
     this.openModal(`
       <div class="modal-title">📜 ${I18n.t('changeLog')}</div>
       ${logs.length > 0 ? logs.map(l =>
-        `<div class="list-item"><div class="list-icon">📝</div><div class="list-body"><div class="list-title">${Utils.escape(l.summary)}</div><div class="list-meta">${l.action} · ${new Date(l.timestamp).toLocaleString('zh-CN')}</div></div></div>`
+        `<div class="list-item"><div class="list-icon">📝</div><div class="list-body"><div class="list-title">${Utils.escape(l.summary)}</div><div class="list-meta">${l.action} · ${Utils.formatBeijing(l.timestamp)}</div></div></div>`
       ).join('') : `<div class="text-light text-sm">${I18n.t('noChangeLog')}</div>`}
       <div class="modal-actions"><button class="btn-cancel" onclick="App.closeModal()">${I18n.t('close')}</button></div>
     `);

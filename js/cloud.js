@@ -140,12 +140,12 @@ const Cloud = {
         .upsert({
           user_id: user.id,
           data: parsed,
-          updated_at: new Date().toISOString(),
+          updated_at: Utils.bjISO(),
         });
 
       if (error) throw error;
 
-      this.lastSyncAt = new Date().toISOString();
+      this.lastSyncAt = Utils.bjISO();
       this.localDirty = false;
       localStorage.setItem('bb_lastSyncAt', this.lastSyncAt);
       localStorage.setItem('bb_localDirty', 'false');

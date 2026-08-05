@@ -1,7 +1,38 @@
 /* ===== Utils 通用工具 ===== */
 const Utils = {
-  today() { return new Date().toISOString().slice(0, 10); },
-  now() { return new Date().toISOString(); },
+  /* 统一时区：北京时间（UTC+8）。所有界面时间均以此为准，不受浏览器所在时区影响。 */
+  _BJ_OFFSET_MIN: 480,
+  // 返回代表「北京当前墙钟时间」的 Date 对象（与浏览器所在时区无关）
+  _bjDate(base) {
+    const d = (base === undefined || base === null) ? new Date() : new Date(base);
+    const utc = d.getTime() + d.getTimezoneOffset() * 60000;
+    return new Date(utc + this._BJ_OFFSET_MIN * 60000);
+  },
+  _pad(n) { return String(n).padStart(2, '0'); },
+  // 北京日期 YYYY-MM-DD
+  today() {
+    const d = this._bjDate();
+    return d.getFullYear() + '-' + this._pad(d.getMonth() + 1) + '-' + this._pad(d.getDate());
+  },
+  // 北京日期时间 YYYY-MM-DD HH:mm:ss（用于入库的 date / createdAt / completedAt 等）
+  now() {
+    const d = this._bjDate();
+    return d.getFullYear() + '-' + this._pad(d.getMonth() + 1) + '-' + this._pad(d.getDate()) + ' ' +
+      this._pad(d.getHours()) + ':' + this._pad(d.getMinutes()) + ':' + this._pad(d.getSeconds());
+  },
+  // 北京 ISO 字符串（可被 new Date() 解析），用于需要 Date 解析的场景（储蓄 ts、云同步）
+  bjISO() {
+    const d = this._bjDate();
+    return d.getFullYear() + '-' + this._pad(d.getMonth() + 1) + '-' + this._pad(d.getDate()) + 'T' +
+      this._pad(d.getHours()) + ':' + this._pad(d.getMinutes()) + ':' + this._pad(d.getSeconds()) + '+08:00';
+  },
+  // 将 epoch 毫秒（或任意可解析时间）格式化为北京时间 YYYY-MM-DD HH:mm
+  formatBeijing(ts) {
+    if (ts === undefined || ts === null || ts === '') return '';
+    const d = this._bjDate(ts);
+    return d.getFullYear() + '-' + this._pad(d.getMonth() + 1) + '-' + this._pad(d.getDate()) + ' ' +
+      this._pad(d.getHours()) + ':' + this._pad(d.getMinutes());
+  },
   formatDate(d) {
     if (!d) return '';
     const dt = typeof d === 'string' ? new Date(d) : d;

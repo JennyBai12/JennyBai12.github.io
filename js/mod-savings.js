@@ -505,7 +505,7 @@ const SavingsMod = {
     const beforeStatus = this.evaluate().status;
 
     const patch = {
-      ts: new Date().toISOString(),
+      ts: Utils.bjISO(),
       date: Utils.today(),
       platforms, balance, monthlyIncome: income,
       monthlyExpense: expense, monthlyExpenseBreakdown: expenseBreakdown, payday
@@ -555,7 +555,7 @@ const SavingsMod = {
 
     Store.add('inbox', {
       type: '生活提醒', source: 'savings', title, content,
-      date: new Date().toISOString(), read: false, actionModule: 'savings', actionSub: '', actionId: 0, auto: false
+      date: Utils.now(), read: false, actionModule: 'savings', actionSub: '', actionId: 0, auto: false
     });
 
     App.openModal(`

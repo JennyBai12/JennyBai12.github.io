@@ -35,7 +35,7 @@ const NewsMod = {
     if (diff < 60000) return '刚刚';
     if (diff < 3600000) return Math.floor(diff / 60000) + ' 分钟前';
     if (diff < 86400000) return Math.floor(diff / 3600000) + ' 小时前';
-    return new Date(t).toLocaleString('zh-CN', { hour12: false }).slice(0, 16);
+    return Utils.formatBeijing(t);
   },
 
   /* ===== 资讯流 ===== */
@@ -505,7 +505,7 @@ const NewsMod = {
   /* 生成条目对象 */
   _buildItem(raw, src) {
     const now = new Date();
-    const p = n => String(n).padStart(2, '0');
+    const bj = Utils._bjDate();
     const summary = raw.desc ? raw.desc.slice(0, 120) : '';
     return {
       title: raw.title.slice(0, 120),
@@ -513,8 +513,8 @@ const NewsMod = {
       url: raw.link,
       platform: src.name,
       contentDate: this._toDate(raw.pubDate),
-      crawlBatch: Utils.today() + '-' + p(now.getHours()),
-      crawlTime: Utils.today() + ' ' + now.toTimeString().slice(0, 8),
+      crawlBatch: Utils.today() + '-' + String(bj.getHours()).padStart(2, '0'),
+      crawlTime: Utils.now(),
       likes: 0, comments: 0, hotRank: 0,
       contentCat: src.contentCat || '综合新闻',
       sourceCat: src.sourceCat || '权威新闻平台',
@@ -626,7 +626,7 @@ const NewsMod = {
         Store.add('inbox', {
           type: 'info', source: '热点资讯', title: '热点资讯已更新',
           content: `自动抓取新增 ${res.added} 条资讯`,
-          date: Utils.today() + ' ' + new Date().toTimeString().slice(0, 5),
+          date: Utils.now(),
           read: false, actionModule: 'news', actionSub: 'feed', actionId: 0, auto: true
         });
         if (App.refreshNotifications) App.refreshNotifications();

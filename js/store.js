@@ -308,7 +308,7 @@ const Store = {
     }
   },
   logChange(module, action, entityId, summary) {
-    this.add('change_logs', { module, action, entityId, summary, timestamp: new Date().toISOString() });
+    this.add('change_logs', { module, action, entityId, summary, timestamp: Utils.bjISO() });
   },
   getChangeLogs(module) {
     return this.get('change_logs').filter(l => l.module === module).slice(-20).reverse();

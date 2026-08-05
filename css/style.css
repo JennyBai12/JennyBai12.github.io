@@ -127,6 +127,19 @@ img { max-width: 100%; display: block; }
 .dash-stat-num { font-size: 28px; font-weight: 800; color: var(--accent); }
 .dash-stat-num.danger { color: var(--danger); }
 .dash-stat-label { font-size: 12px; color: var(--text-light); margin-top: 4px; }
+/* 可点击统计卡（影音汇总下钻） */
+.dash-stat.stat-click { cursor: pointer; transition: transform .12s ease, box-shadow .12s ease, background .12s ease; }
+.dash-stat.stat-click:hover { transform: translateY(-2px); box-shadow: 0 6px 18px rgba(130,158,142,0.22); }
+.dash-stat.stat-active { background: var(--accent); }
+.dash-stat.stat-active .dash-stat-num, .dash-stat.stat-active .dash-stat-label { color: #fff; }
+
+/* ===== 汇总面板 ===== */
+.summary-card { background: var(--card); border-radius: var(--radius); padding: 12px 14px; box-shadow: var(--shadow); }
+.summary-title { font-size: 13px; font-weight: 700; color: var(--accent); margin-bottom: 8px; }
+.summary-sub { font-size: 12px; color: var(--text-light); margin-top: 8px; line-height: 1.5; }
+
+/* 小型下拉（评分筛选等） */
+.mini-select { padding: 5px 8px; font-size: 12px; border: 1px solid var(--border); border-radius: 6px; background: var(--card); color: var(--text); max-width: 130px; }
 
 /* ===== 标题 ===== */
 .section-title { font-size: 18px; font-weight: 700; margin: 20px 0 12px; color: var(--text); }
