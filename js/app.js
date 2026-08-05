@@ -16,6 +16,7 @@ const App = {
     { id: 'reminders', icon: '⏰', label: 'reminders' },
     { id: 'calendar', icon: '📅', label: 'calendar' },
   ],
+  APP_VERSION: 'v27',
 
   init() {
     Store.init();
@@ -41,6 +42,15 @@ const App = {
     }
     // 热点资讯：后台自动增量抓取（每2小时检查一次）
     if (typeof NewsMod !== 'undefined' && NewsMod.startAutoCrawl) NewsMod.startAutoCrawl();
+    // 常驻显示当前版本号，便于确认是否已加载最新版（排查「改动不生效」问题时使用）
+    let vt = document.getElementById('app-version-tag');
+    if (!vt) {
+      vt = document.createElement('div');
+      vt.id = 'app-version-tag';
+      vt.style.cssText = 'position:fixed;right:8px;bottom:8px;z-index:9999;font-size:11px;opacity:.4;background:rgba(0,0,0,.4);color:#fff;padding:2px 8px;border-radius:10px;pointer-events:none;';
+      document.body.appendChild(vt);
+    }
+    vt.textContent = '白白的日记 ' + (this.APP_VERSION || '');
   },
 
   /* 清理超过7天的收件箱消息 */
