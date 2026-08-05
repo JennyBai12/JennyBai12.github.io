@@ -1,5 +1,5 @@
 // PWA Service Worker - 离线缓存
-const CACHE = 'diary-v38';
+const CACHE = 'diary-v39';
 const ASSETS = ['/', '/index.html', '/css/style.css', '/manifest.json', '/js/i18n.js', '/js/store.js', '/js/cloud.js', '/js/charts.js', '/js/utils.js', '/js/task-aggregate.js', '/js/app.js', '/js/mod-habits.js', '/js/mod-study.js', '/js/mod-health.js', '/js/mod-work.js', '/js/mod-news.js', '/js/mod-diary.js', '/js/mod-wardrobe.js', '/js/mod-goods.js', '/js/mod-savings.js', '/js/mod-reminders.js', '/js/mod-calendar.js'];
 
 self.addEventListener('install', (e) => {

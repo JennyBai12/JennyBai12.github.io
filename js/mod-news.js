@@ -62,7 +62,7 @@ const NewsMod = {
     document.getElementById('news-sub').innerHTML = `
       <div class="card mb-12">
         <div class="flex-between mb-8">
-          <div class="text-sm text-light">🔄 每2小时自动增量抓取 · 标题/URL双重去重 · 多代理容错</div>
+          <div class="text-sm text-light">🔄 每1小时自动增量抓取 · 标题/URL双重去重 · 多代理容错</div>
           <div class="flex gap-8">
             <button class="btn btn-outline btn-sm" onclick="NewsMod.manageSources()">📡 抓取源</button>
             <button class="btn btn-primary btn-sm" onclick="NewsMod.manualCrawl()">⚡ 手动抓取</button>
@@ -547,6 +547,8 @@ const NewsMod = {
     const existing = Store.get('hotspot_data');
     const seenTitle = new Set(existing.map(e => e.title));
     const seenUrl = new Set(existing.map(e => e.url).filter(Boolean));
+    /* 核心抓取流程：返回 added/okList/failList/total；只有至少一个源成功才刷新 LAST_CRAWL_KEY，
+       避免全部失败时 lastCrawlText 显示「刚刚」但列表无新内容 */
     let added = 0;
     const okList = [], failList = [];
 
@@ -569,8 +571,11 @@ const NewsMod = {
         failList.push(`${src.name}（${e.message || '失败'}）`);
       }
     }
-    localStorage.setItem(this.LAST_CRAWL_KEY, String(Date.now()));
-    this.cleanOldNews();
+    // 至少有一个源成功，才认为本次抓取有效，更新 last crawl time
+    if (okList.length) {
+      localStorage.setItem(this.LAST_CRAWL_KEY, String(Date.now()));
+      this.cleanOldNews();
+    }
     return { added, okList, failList, total: srcs.length };
   },
 
@@ -607,15 +612,17 @@ const NewsMod = {
     const area = document.getElementById('crawl-area');
     if (!area) return;
     const allFail = res.failList.length === res.total;
+    const noNew = res.added === 0 && !allFail;
     area.innerHTML = `
       <div class="ai-report">
-        <div class="ai-report-title">${allFail ? '⚠️ 抓取失败' : '✅ 抓取完成'}</div>
+        <div class="ai-report-title">${allFail ? '⚠️ 抓取失败' : noNew ? 'ℹ️ 暂无新增' : '✅ 抓取完成'}</div>
         <div class="ai-report-body">
           本轮新增 <b>${res.added}</b> 条资讯（标题/URL 双重去重）<br>
           ${res.okList.length ? '成功：' + Utils.escape(res.okList.join('、')) + '<br>' : ''}
           ${res.failList.length ? '<span style="color:#C08B7D;">失败：' + Utils.escape(res.failList.join('、')) + '</span><br>' : ''}
           ${allFail ? '<div class="text-sm" style="margin-top:6px;">可能原因：当前网络无法访问外部 RSS 或公共代理被限流。可稍后重试，或在「抓取源」中更换为可访问的 RSS 地址。</div>' : ''}
-          <div class="text-sm text-light" style="margin-top:6px;">下一轮自动抓取：2 小时后 · 存档保留 30 天</div>
+          ${noNew ? '<div class="text-sm" style="margin-top:6px;">抓取源返回的内容与现有库重复，或当前源暂未更新。可稍后重试或点击「手动抓取」再次触发。</div>' : ''}
+          <div class="text-sm text-light" style="margin-top:6px;">下一轮自动抓取：1 小时后 · 存档保留 30 天</div>
         </div>
       </div>
       <div class="modal-actions">
@@ -630,13 +637,15 @@ const NewsMod = {
     if (!force && Date.now() - last < this.CRAWL_INTERVAL_MS) return;
     try {
       const res = await this.runCrawl();
-      if (res.added > 0) {
-        Store.add('inbox', {
-          type: 'info', source: '热点资讯', title: '热点资讯已更新',
-          content: `自动抓取新增 ${res.added} 条资讯`,
-          date: Utils.now(),
-          read: false, actionModule: 'hotspot', actionSub: 'feed', actionId: 0, auto: true
-        });
+      if (res.added > 0 || res.okList.length > 0) {
+        if (res.added > 0) {
+          Store.add('inbox', {
+            type: 'info', source: '热点资讯', title: '热点资讯已更新',
+            content: `自动抓取新增 ${res.added} 条资讯`,
+            date: Utils.now(),
+            read: false, actionModule: 'hotspot', actionSub: 'feed', actionId: 0, auto: true
+          });
+        }
         if (App.refreshNotifications) App.refreshNotifications();
         if (App.currentModule === 'hotspot') App.render();
       }
