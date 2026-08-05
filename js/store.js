@@ -187,6 +187,8 @@ const Store = {
       { id:3, name:'元旦', date:'2027-01-01', days:3, type:'法定' },
     ]},
     change_logs: { fields: ['module','action','entityId','summary','timestamp'], seed: [] },
+    /* ===== 表单草稿（误触退出时自动保存，下次进入可继续编辑） ===== */
+    drafts: { fields: ['key','data','ts'], seed: [] },
     /* ===== 通用输入历史记忆（影院 / 日记标签 / 影音标签等，供模糊建议使用） ===== */
     input_history: { fields: ['key','value','count','lastUsed'], seed: [
       { id:1, key:'cinema', value:'万达影城IMAX厅', count:1, lastUsed:'2026-07-20' },

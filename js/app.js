@@ -16,7 +16,7 @@ const App = {
     { id: 'reminders', icon: '⏰', label: 'reminders' },
     { id: 'calendar', icon: '📅', label: 'calendar' },
   ],
-  APP_VERSION: 'v31',
+  APP_VERSION: 'v32',
 
   /* 版本更新说明：新版本上线后首次打开自动弹窗展示，并同步推送至收件箱 */
   CHANGELOG: {
@@ -42,6 +42,11 @@ const App = {
       '💰 新增「年存款目标」与达成比例进度条',
       '💰 新增「计划支出项」（养老金 / 保险 / 大疆等）：含截止时间、预估花费，与「攒到多少才能购入」的门槛及进度',
       '🔒 私密日记与储蓄记录：退出当前界面再点进去会重新要求输入密码'
+    ],
+    'v32': [
+      '📚 年度阅读计划的「阅读主题方向」改为多标签输入，并自动记忆你之前填过的标签，输入即模糊联想',
+      '🎬 影音记录的「题材标签」新增预设题材快捷选项（科幻、悬疑、喜剧等），点击即选；已有标签会永久保存并持续作为选项',
+      '📝 新增「误触保护」：书籍 / 影音 / 阅读计划 / 摘抄 / 读后感 等表单，未保存就误触退出时自动保存草稿，下次点进去自动恢复继续编辑（顶栏提示「已恢复上次未完成的草稿」，可一键丢弃）'
     ]
   },
 
@@ -157,6 +162,8 @@ const App = {
   },
 
   navigate(module, sub) {
+    // 切换模块时先关闭任何打开的弹窗（草稿已在输入时实时保存，不会丢失）
+    this.closeModal();
     const prev = this.currentModule;
     // 离开保密模块（私密日记 / 储蓄）后，再进入需重新输入密码
     if (prev !== module) {
@@ -978,7 +985,11 @@ const App = {
     m.innerHTML = `<div class="modal" onclick="event.stopPropagation()">${html}</div>`;
     m.classList.remove('hidden');
   },
-  closeModal() { document.getElementById('generic-modal').classList.add('hidden'); },
+  closeModal() {
+    const m = document.getElementById('generic-modal');
+    if (m) m.classList.add('hidden');
+    this._clearDraftListeners();
+  },
 
   /* ===== 确认弹窗 ===== */
   confirmCb: null,
@@ -1178,6 +1189,93 @@ const App = {
 
   escape(str) { return Utils.escape(str); },
   today() { return Utils.today(); },
+
+  /* ===== 表单草稿自动保存（误触退出后可恢复继续编辑） =====
+   * 用法（在每个表单 openModal 之后调用）：
+   *   App.ensureDraft('media', ()=>({...收集字段}), (d)=>{...回填字段}, ()=>StudyMod.addMedia());
+   * - 打开表单时若已有该 key 草稿，自动回填并提示「已恢复上次未完成的草稿」
+   * - 表单内任意输入/变更都会实时写入 drafts 表（防误触丢失）
+   * - 点「保存」成功后调用 App.clearDraft(key) 清除草稿
+   * - 误触退出（取消/点背景/切模块）草稿保留，下次进入自动恢复
+   */
+  _draftKey: null,
+  _draftCollect: null,
+  _draftReopen: null,
+  _draftHandler: null,
+
+  ensureDraft(key, collect, restore, reopen) {
+    this._clearDraftListeners();
+    this._draftKey = key;
+    this._draftCollect = collect;
+    this._draftReopen = reopen || null;
+    const existing = Store.get('drafts').find(d => d.key === key);
+    if (existing && existing.data && this._draftNonEmpty(existing.data)) {
+      restore(existing.data);
+      this._showDraftBanner(key);
+    }
+    const modal = document.getElementById('generic-modal');
+    this._draftHandler = () => this._draftFlush();
+    modal.addEventListener('input', this._draftHandler);
+    modal.addEventListener('change', this._draftHandler);
+  },
+
+  _clearDraftListeners() {
+    const modal = document.getElementById('generic-modal');
+    if (modal && this._draftHandler) {
+      modal.removeEventListener('input', this._draftHandler);
+      modal.removeEventListener('change', this._draftHandler);
+    }
+    this._draftKey = null;
+    this._draftCollect = null;
+    this._draftReopen = null;
+    this._draftHandler = null;
+  },
+
+  _draftFlush() {
+    if (!this._draftKey || !this._draftCollect) return;
+    const data = this._draftCollect();
+    if (!this._draftNonEmpty(data)) return;
+    const list = Store.get('drafts');
+    const idx = list.findIndex(x => x.key === this._draftKey);
+    const rec = { key: this._draftKey, data, ts: Utils.today() + ' ' + new Date().toLocaleTimeString('zh-CN') };
+    if (idx >= 0) list[idx] = rec; else list.push(rec);
+    Store.save('drafts', list);
+  },
+
+  _draftNonEmpty(data) {
+    if (!data || typeof data !== 'object') return false;
+    return Object.keys(data).some(k => {
+      const v = data[k];
+      if (Array.isArray(v)) return v.length > 0;
+      return String(v == null ? '' : v).trim() !== '';
+    });
+  },
+
+  clearDraft(key) {
+    Store.save('drafts', Store.get('drafts').filter(x => x.key !== key));
+    this._clearDraftListeners();
+  },
+
+  _showDraftBanner(key) {
+    const modal = document.getElementById('generic-modal');
+    if (!modal) return;
+    const inner = modal.querySelector('.modal');
+    if (!inner) return;
+    if (inner.querySelector('.draft-banner')) return;
+    const bar = document.createElement('div');
+    bar.className = 'draft-banner';
+    bar.innerHTML = `📝 已为你恢复上次未完成的草稿（<span class="draft-discard" onclick="App.discardDraft('${key}')">丢弃</span>）`;
+    inner.insertBefore(bar, inner.firstChild);
+  },
+
+  discardDraft(key) {
+    const k = key || this._draftKey;
+    if (!k) return;
+    this.clearDraft(k);
+    App.showToast('已丢弃草稿', 'success');
+    if (this._draftReopen) this._draftReopen();
+    else App.closeModal();
+  },
 };
 
 /* 初始化确认按钮 */

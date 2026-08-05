@@ -1,4 +1,6 @@
 /* ===== 学习模块（含阅读子板块） ===== */
+const MOVIE_GENRES = ['科幻', '悬疑', '喜剧', '爱情', '动作', '剧情', '动画', '恐怖', '惊悚', '犯罪', '奇幻', '武侠', '战争', '纪录', '家庭', '音乐', '体育', '传记', '冒险', '歌舞'];
+
 const StudyMod = {
   subTab: 'records',
 
@@ -204,6 +206,23 @@ const StudyMod = {
       <div class="form-group"><label class="form-label">开始日期</label><input type="date" id="bk-start" value="${Utils.today()}"></div>
       <div class="modal-actions"><button class="btn-cancel" onclick="App.closeModal()">${I18n.t('cancel')}</button><button class="btn-confirm" onclick="StudyMod.saveBook()">${I18n.t('save')}</button></div>
     `);
+    App.ensureDraft('book',
+      () => ({
+        title: document.getElementById('bk-title')?.value || '',
+        author: document.getElementById('bk-author')?.value || '',
+        category: document.getElementById('bk-category')?.value || '',
+        status: document.getElementById('bk-status')?.value || '待阅读',
+        start: document.getElementById('bk-start')?.value || '',
+      }),
+      (d) => {
+        if (d.title != null) document.getElementById('bk-title').value = d.title;
+        if (d.author != null) document.getElementById('bk-author').value = d.author;
+        if (d.category != null) document.getElementById('bk-category').value = d.category;
+        if (d.status != null) document.getElementById('bk-status').value = d.status;
+        if (d.start != null) document.getElementById('bk-start').value = d.start;
+      },
+      () => StudyMod.addBook()
+    );
   },
 
   saveBook() {
@@ -216,6 +235,7 @@ const StudyMod = {
       startDate: document.getElementById('bk-start').value, endDate: '',
       progress: status === '已读完' ? 100 : 0, status, rating: 0, cover: ''
     });
+    App.clearDraft('book');
     App.closeModal(); App.showToast(I18n.t('added'), 'success'); App.render();
   },
 
@@ -242,6 +262,17 @@ const StudyMod = {
       </div>
       <div class="modal-actions"><button class="btn-cancel" onclick="App.closeModal()">${I18n.t('cancel')}</button><button class="btn-confirm" onclick="StudyMod.saveExcerpt(${bookId})">${I18n.t('save')}</button></div>
     `);
+    App.ensureDraft('excerpt',
+      () => ({
+        text: document.getElementById('ex-text')?.value || '',
+        annotation: document.getElementById('ex-annotation')?.value || '',
+      }),
+      (d) => {
+        if (d.text != null) document.getElementById('ex-text').value = d.text;
+        if (d.annotation != null) document.getElementById('ex-annotation').value = d.annotation;
+      },
+      () => StudyMod.addExcerpt(bookId)
+    );
   },
 
   /* 从剪贴板粘贴文字到指定输入框（OCR 的兜底方案） */
@@ -282,6 +313,7 @@ const StudyMod = {
     const text = document.getElementById('ex-text').value.trim();
     if (!text) { App.showToast(I18n.t('fillRequired'), 'error'); return; }
     Store.add('book_excerpts', { bookId, text, annotation: document.getElementById('ex-annotation').value, date: Utils.today() });
+    App.clearDraft('excerpt');
     App.showToast(I18n.t('added'), 'success');
     this.bookDetail(bookId);
   },
@@ -331,6 +363,23 @@ const StudyMod = {
     App.closeModal();
     App.openModal(this.reviewForm(null, bookId));
     App.bindSuggest('rv-tags', Store.historyOf('reviewTags'), { multi: true, historyKey: 'reviewTags' });
+    App.ensureDraft('review',
+      () => ({
+        title: document.getElementById('rv-title')?.value || '',
+        content: document.getElementById('rv-content')?.value || '',
+        rating: (document.querySelector('#rv-rating .tag.active') || {}).dataset?.v || '0',
+        tags: document.getElementById('rv-tags')?.value || '',
+        date: document.getElementById('rv-date')?.value || '',
+      }),
+      (d) => {
+        if (d.title != null) document.getElementById('rv-title').value = d.title;
+        if (d.content != null) document.getElementById('rv-content').value = d.content;
+        if (d.rating != null) document.querySelectorAll('#rv-rating .tag').forEach(e => e.classList.toggle('active', e.dataset.v === String(d.rating)));
+        if (d.tags != null) document.getElementById('rv-tags').value = d.tags;
+        if (d.date != null) document.getElementById('rv-date').value = d.date;
+      },
+      () => StudyMod.addReview(bookId)
+    );
   },
 
   editReview(id) {
@@ -371,6 +420,7 @@ const StudyMod = {
     if (reviewId) Store.update('book_reviews', reviewId, payload);
     else Store.add('book_reviews', payload);
     if (payload.tags) Store.rememberInput('reviewTags', payload.tags);
+    App.clearDraft('review');
     App.showToast(I18n.t('saved'), 'success');
     this.bookDetail(bookId);
   },
@@ -393,7 +443,7 @@ const StudyMod = {
       <div class="modal-title">📅 ${year}年度阅读计划</div>
       <div class="form-group"><label class="form-label">全年阅读总本数</label><input type="number" id="plan-total" value="${plan.totalGoal || 24}"></div>
       <div class="form-group"><label class="form-label">每月最低阅读量</label><input type="number" id="plan-monthly" value="${plan.monthlyMin || 2}"></div>
-      <div class="form-group"><label class="form-label">阅读主题方向</label><input type="text" id="plan-themes" value="${plan.themes || ''}" placeholder="设计,编程,心理学"></div>
+      <div class="form-group"><label class="form-label">阅读主题方向（可多选标签）</label>${App.suggestInput({ id: 'plan-themes', value: plan.themes || '', placeholder: '输入即联想历史标签，可多选，逗号分隔' })}</div>
       <div class="form-group"><label class="form-label">目标书单</label><textarea id="plan-books" rows="3">${plan.bookList || ''}</textarea></div>
       <div class="two-col">
         <div class="form-group"><label class="form-label">Q1目标</label><input type="number" id="plan-q1" value="${plan.q1Goal || 6}"></div>
@@ -406,6 +456,30 @@ const StudyMod = {
       <div class="text-sm text-light">注：年度计划修改不存档，只保留最新版本。</div>
       <div class="modal-actions"><button class="btn-cancel" onclick="App.closeModal()">${I18n.t('cancel')}</button><button class="btn-confirm" onclick="StudyMod.savePlan(${plan.id || 'null'}, ${year})">${I18n.t('save')}</button></div>
     `);
+    App.bindSuggest('plan-themes', Store.historyOf('readingThemes'), { multi: true, historyKey: 'readingThemes' });
+    App.ensureDraft('plan',
+      () => ({
+        total: document.getElementById('plan-total')?.value || '',
+        monthly: document.getElementById('plan-monthly')?.value || '',
+        themes: document.getElementById('plan-themes')?.value || '',
+        books: document.getElementById('plan-books')?.value || '',
+        q1: document.getElementById('plan-q1')?.value || '',
+        q2: document.getElementById('plan-q2')?.value || '',
+        q3: document.getElementById('plan-q3')?.value || '',
+        q4: document.getElementById('plan-q4')?.value || '',
+      }),
+      (d) => {
+        if (d.total != null) document.getElementById('plan-total').value = d.total;
+        if (d.monthly != null) document.getElementById('plan-monthly').value = d.monthly;
+        if (d.themes != null) document.getElementById('plan-themes').value = d.themes;
+        if (d.books != null) document.getElementById('plan-books').value = d.books;
+        if (d.q1 != null) document.getElementById('plan-q1').value = d.q1;
+        if (d.q2 != null) document.getElementById('plan-q2').value = d.q2;
+        if (d.q3 != null) document.getElementById('plan-q3').value = d.q3;
+        if (d.q4 != null) document.getElementById('plan-q4').value = d.q4;
+      },
+      () => StudyMod.editPlan()
+    );
   },
 
   savePlan(id, year) {
@@ -421,6 +495,8 @@ const StudyMod = {
     };
     if (id) Store.update('annual_reading_plans', id, data);
     else Store.add('annual_reading_plans', data);
+    if (data.themes) Store.rememberInput('readingThemes', data.themes);
+    App.clearDraft('plan');
     App.closeModal(); App.showToast(I18n.t('saved'), 'success'); App.render();
   },
 
@@ -526,7 +602,10 @@ const StudyMod = {
           <option>想看</option><option>追更中</option><option>已看完</option><option>搁置弃看</option>
         </select></div>
       </div>
-      <div class="form-group"><label class="form-label">题材标签</label>${App.suggestInput({ id: 'md-tags', placeholder: '如：科幻,悬疑（可多选，输入即联想）', className: '' })}</div>
+      <div class="form-group"><label class="form-label">题材标签</label>
+        <div class="tag-presets" id="md-tag-presets"></div>
+        ${App.suggestInput({ id: 'md-tags', placeholder: '点击上方选项或自行输入，可多选', className: '' })}
+      </div>
       <div class="two-col">
         <div class="form-group"><label class="form-label">观看起始日期</label><input type="date" id="md-start" value="${Utils.today()}"></div>
         <div class="form-group"><label class="form-label">完结日期</label><input type="date" id="md-end"></div>
@@ -583,6 +662,94 @@ const StudyMod = {
     `);
     this.toggleMediaFields();
     this.bindMediaSuggest();
+    this.renderTagPresets();
+    App.ensureDraft('media',
+      () => ({
+        title: document.getElementById('md-title')?.value || '',
+        category: document.getElementById('md-category')?.value || '电影',
+        status: document.getElementById('md-status')?.value || '想看',
+        tags: document.getElementById('md-tags')?.value || '',
+        start: document.getElementById('md-start')?.value || '',
+        end: document.getElementById('md-end')?.value || '',
+        cost: document.getElementById('md-cost')?.value || '0',
+        rating: document.getElementById('md-rating')?.value || '0',
+        progress: document.getElementById('md-progress')?.value || '0',
+        channel: document.getElementById('md-channel')?.value || '',
+        cinema: document.getElementById('md-cinema')?.value || '',
+        showtime: document.getElementById('md-showtime')?.value || '',
+        ticket: document.getElementById('md-ticket')?.value || '0',
+        companions: document.getElementById('md-companions')?.value || '',
+        totalEp: document.getElementById('md-total-ep')?.value || '0',
+        curEp: document.getElementById('md-cur-ep')?.value || '0',
+        dramaNotes: document.getElementById('md-drama-notes')?.value || '',
+        docTopic: document.getElementById('md-doc-topic')?.value || '',
+        docKnowledge: document.getElementById('md-doc-knowledge')?.value || '',
+        docReflection: document.getElementById('md-doc-reflection')?.value || '',
+        addStudy: (document.getElementById('md-add-study') || {}).checked || false,
+        abandon: document.getElementById('md-abandon')?.value || '',
+        images: (this._mediaImages || []).slice(),
+      }),
+      (d) => {
+        const g = (id) => document.getElementById(id);
+        if (d.title != null) g('md-title').value = d.title;
+        if (d.category != null) { g('md-category').value = d.category; this.toggleMediaFields(); }
+        if (d.status != null) { g('md-status').value = d.status; this.toggleMediaFields(); }
+        if (d.tags != null) g('md-tags').value = d.tags;
+        if (d.start != null) g('md-start').value = d.start;
+        if (d.end != null) g('md-end').value = d.end;
+        if (d.cost != null) g('md-cost').value = d.cost;
+        if (d.rating != null) g('md-rating').value = d.rating;
+        if (d.progress != null) g('md-progress').value = d.progress;
+        if (d.channel != null) g('md-channel').value = d.channel;
+        if (d.cinema != null) g('md-cinema').value = d.cinema;
+        if (d.showtime != null) g('md-showtime').value = d.showtime;
+        if (d.ticket != null) g('md-ticket').value = d.ticket;
+        if (d.companions != null) g('md-companions').value = d.companions;
+        if (d.totalEp != null) g('md-total-ep').value = d.totalEp;
+        if (d.curEp != null) g('md-cur-ep').value = d.curEp;
+        if (d.dramaNotes != null) g('md-drama-notes').value = d.dramaNotes;
+        if (d.docTopic != null) g('md-doc-topic').value = d.docTopic;
+        if (d.docKnowledge != null) g('md-doc-knowledge').value = d.docKnowledge;
+        if (d.docReflection != null) g('md-doc-reflection').value = d.docReflection;
+        if (g('md-add-study')) g('md-add-study').checked = !!d.addStudy;
+        if (d.abandon != null) g('md-abandon').value = d.abandon;
+        if (Array.isArray(d.images)) {
+          this._mediaImages = d.images.slice();
+          g('md-imgs').innerHTML = App.renderImageGrid(this._mediaImages, 'media');
+        }
+        this._syncPresetActive();
+        this.bindMediaSuggest();
+      },
+      () => StudyMod.addMedia()
+    );
+  },
+
+  renderTagPresets() {
+    const el = document.getElementById('md-tag-presets');
+    if (!el) return;
+    el.innerHTML = MOVIE_GENRES.map(g =>
+      `<span class="tag-preset" data-g="${Utils.escape(g)}" onclick="StudyMod.togglePresetTag('${Utils.escape(g)}')">${Utils.escape(g)}</span>`
+    ).join('');
+    this._syncPresetActive();
+  },
+
+  togglePresetTag(g) {
+    const input = document.getElementById('md-tags');
+    if (!input) return;
+    const cur = new Set((input.value || '').split(/[,，]/).map(s => s.trim()).filter(Boolean));
+    if (cur.has(g)) cur.delete(g); else cur.add(g);
+    input.value = [...cur].join(',');
+    this._syncPresetActive();
+    if (App._draftFlush) App._draftFlush();
+  },
+
+  _syncPresetActive() {
+    const input = document.getElementById('md-tags');
+    if (!input) return;
+    const cur = new Set((input.value || '').split(/[,，]/).map(s => s.trim()).filter(Boolean));
+    document.querySelectorAll('#md-tag-presets .tag-preset').forEach(el => {
+      el.classList.toggle('active', cur.has(el.dataset.g));
+    });
   },
 
   /* 绑定影院 / 标签 / 同行人 的模糊建议数据源 */
@@ -604,6 +771,7 @@ const StudyMod = {
   mediaTagOptions() {
     const set = [];
     const push = v => { const s = String(v || '').trim(); if (s && set.indexOf(s) === -1) set.push(s); };
+    MOVIE_GENRES.forEach(push);
     Store.historyOf('mediaTags').forEach(push);
     Store.get('media').forEach(m => String(m.tags || '').split(/[,，]/).forEach(push));
     return set;
@@ -645,6 +813,7 @@ const StudyMod = {
         const g = document.getElementById('md-imgs');
         if (g) g.innerHTML = App.renderImageGrid(StudyMod._mediaImages, 'media');
         App.showToast('已添加图片', 'success');
+        if (App._draftFlush) App._draftFlush();
       });
     };
     input.click();
@@ -715,6 +884,7 @@ ${Utils.escape(text)}</div>`
 ${Utils.escape(text)}</div>`;
     }
     if (filled.length) App.showToast(`已回填 ${filled.length} 项`, 'success');
+    if (App._draftFlush) App._draftFlush();
   },
 
   toggleMediaFields() {
@@ -780,6 +950,7 @@ ${Utils.escape(text)}</div>`;
         date: data.startDate, note: data.docTopic + ': ' + (data.docReflection || '')
       });
     }
+    App.clearDraft('media');
     this._mediaImages = [];
     App.closeModal(); App.showToast(I18n.t('added'), 'success'); App.render();
   },

@@ -667,6 +667,27 @@ input[type=radio], input[type=checkbox] { width: auto; margin-right: 6px; }
 .suggest-del { color: var(--text-light); font-size: 11px; opacity: .5; padding: 0 2px; }
 .suggest-del:hover { opacity: 1; color: #C08B7D; }
 
+/* ===== 题材/预设标签快捷选项 ===== */
+.tag-presets { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
+.tag-preset {
+  font-size: 12px; padding: 4px 10px; border-radius: 14px; cursor: pointer;
+  background: rgba(130,158,142,0.10); color: var(--text); border: 1px solid transparent;
+  transition: all .15s ease; user-select: none;
+}
+.tag-preset:hover { background: rgba(130,158,142,0.20); }
+.tag-preset.active { background: var(--accent); color: var(--white); border-color: var(--accent); }
+
+/* ===== 草稿恢复提示条 ===== */
+.draft-banner {
+  background: rgba(226,170,80,0.14); border: 1px solid rgba(226,170,80,0.5);
+  color: #9a6a22; font-size: 12.5px; padding: 8px 12px; border-radius: 10px;
+  margin-bottom: 12px; line-height: 1.5;
+}
+.draft-discard {
+  color: var(--danger); text-decoration: underline; cursor: pointer; margin-left: 4px;
+  font-weight: 600;
+}
+
 /* ===== 图标选择器（习惯自定义图标） ===== */
 .icon-picker { display: flex; flex-wrap: wrap; gap: 8px; margin: 8px 0; }
 .icon-opt {
