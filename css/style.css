@@ -760,3 +760,46 @@ input[type=radio], input[type=checkbox] { width: auto; margin-right: 6px; }
 /* 体态问题勾选芯片：复用 .tag，这里仅做细微间距与可点反馈 */
 .posture-prob { user-select: none; }
 .posture-prob:active { transform: scale(0.96); }
+
+/* ===== 更新说明弹窗 ===== */
+.changelog-box {
+  max-height: 46vh; overflow-y: auto;
+  background: rgba(130,158,142,0.08); border-radius: 12px;
+  padding: 12px 14px; margin-top: 6px;
+}
+.changelog-ver {
+  font-size: 14px; font-weight: 700; color: var(--accent);
+  margin: 12px 0 6px;
+}
+.changelog-ver:first-child { margin-top: 0; }
+.changelog-line {
+  font-size: 13px; color: var(--text); line-height: 1.7;
+  padding-left: 2px;
+}
+
+/* ===== 储蓄板块（v29 改版） ===== */
+.text-danger { color: var(--danger) !important; }
+
+.sv-pf-row { display: flex; gap: 8px; align-items: center; margin-bottom: 8px; }
+.sv-pf-row input[type="text"] { flex: 1.4; }
+.sv-pf-row input[type="number"] { flex: 1; }
+.sv-total { font-weight: 700; font-size: 15px; color: var(--accent); }
+
+.sv-delta { font-size: 13px; font-weight: 700; }
+.sv-delta.up { color: var(--danger); }      /* 结余上涨 → 红 */
+.sv-delta.down { color: var(--accent); }    /* 结余下跌 → 绿 */
+.sv-delta-pct { font-size: 11px; opacity: .8; font-weight: 600; }
+
+.status-line {
+  display: flex; align-items: center; gap: 8px;
+  padding: 12px 14px; border-radius: 12px;
+  font-size: 14px; font-weight: 600; margin-top: 12px;
+}
+.status-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+.status-ok { background: rgba(130,158,142,0.12); color: var(--accent); }
+.status-ok .status-dot { background: var(--accent); }
+.status-warn { background: #FFF3E0; color: #E65100; }
+.status-warn .status-dot { background: var(--warn); }
+.status-danger { background: #FFEBEE; color: #B71C1C; }
+.status-danger .status-dot { background: var(--danger); }
+

@@ -16,7 +16,44 @@ const App = {
     { id: 'reminders', icon: '⏰', label: 'reminders' },
     { id: 'calendar', icon: '📅', label: 'calendar' },
   ],
-  APP_VERSION: 'v27',
+  APP_VERSION: 'v29',
+
+  /* 版本更新说明：新版本上线后首次打开自动弹窗展示 */
+  CHANGELOG: {
+    'v27': [
+      '右下角新增常驻版本号，便于确认是否已加载最新版',
+      '修复 Service Worker 缓存导致「改动不生效」的问题（更新后自动刷新页面）'
+    ],
+    'v29': [
+      '💰 储蓄板块全面改版：进入需输入与「私密日记」相同的密码，完全保密',
+      '💰 快照式存档：登记结余 + 月收入 + 月支出，每次生成独立且永久锁定的存档快照',
+      '💰 月度进度监测：展示消耗进度、目标结余差值、正常 / 节约预警 / 超支预警三态标签',
+      '💰 触发预警时自动弹窗并推送至收件箱；历史存档仅展示时间 / 结余 / 收支，不暴露单笔流水'
+    ]
+  },
+
+  _verNum(v) { const m = String(v || '').match(/(\d+)/); return m ? +m[1] : 0; },
+
+  maybeShowChangelog(force) {
+    const seen = Store.getSetting('seenVersion', '');
+    if (!force && seen === this.APP_VERSION) return;
+    const seenNum = this._verNum(seen);
+    const versions = Object.keys(this.CHANGELOG)
+      .filter(v => this._verNum(v) > seenNum)
+      .sort((a, b) => this._verNum(a) - this._verNum(b));
+    if (!versions.length) { Store.setSetting('seenVersion', this.APP_VERSION); return; }
+    const lines = [];
+    versions.forEach(v => {
+      lines.push(`<div class="changelog-ver">【${Utils.escape(v)}】</div>`);
+      this.CHANGELOG[v].forEach(c => lines.push(`<div class="changelog-line">· ${Utils.escape(c)}</div>`));
+    });
+    App.openModal(`
+      <div class="modal-title">🎉 已更新到 ${Utils.escape(this.APP_VERSION)}</div>
+      <div class="changelog-box">${lines.join('')}</div>
+      <div class="modal-actions"><button class="btn-confirm" onclick="App.closeModal()">知道了</button></div>
+    `);
+    Store.setSetting('seenVersion', this.APP_VERSION);
+  },
 
   init() {
     Store.init();
@@ -51,7 +88,14 @@ const App = {
       document.body.appendChild(vt);
     }
     vt.textContent = '白白的日记 ' + (this.APP_VERSION || '');
+    vt.style.pointerEvents = 'auto';
+    vt.style.cursor = 'pointer';
+    vt.title = '点击查看更新说明';
+    vt.onclick = () => App.maybeShowChangelog(true);
+    // 版本更新后自动弹出更新说明
+    this.maybeShowChangelog();
   },
+
 
   /* 清理超过7天的收件箱消息 */
   cleanExpiredInbox() {
@@ -724,22 +768,19 @@ const App = {
       });
     }
 
-    // 3. 财务记账 — 预算预警
-    const txns = Store.filter('transactions', t => t.type === '支出' && t.date.slice(0, 7) === today.slice(0, 7));
-    const monthSpend = txns.reduce((s, t) => s + (+t.amount || 0), 0);
-    const thresholds = Store.get('spending_threshold');
-    if (thresholds.length > 0) {
-      const th = thresholds[0];
-      const threshold = th.threshold || 0;
-      if (threshold > 0) {
-        const ratio = monthSpend / threshold;
-        if (ratio >= 1) add('生活提醒', 'savings', `🚨 预算超支！`, `本月已支出 ¥${monthSpend.toFixed(2)}，预算 ¥${threshold}，已超支 ¥${(monthSpend - threshold).toFixed(2)}。`, 'savings', '', 0);
-        else if (ratio >= 0.8) add('生活提醒', 'savings', `⚠️ 预算预警`, `本月已支出 ¥${monthSpend.toFixed(2)}，达到预算 ¥${threshold} 的 ${Math.round(ratio * 100)}%。`, 'savings', '', 0);
+    // 3. 储蓄板块 — 月度进度状态提醒（与登记时联动，每日最多提示一次）
+    if (typeof SavingsMod !== 'undefined') {
+      const ev = SavingsMod.evaluate();
+      if (ev.has && ev.status !== 'normal') {
+        const isOver = ev.status === 'overspend';
+        add('生活提醒', 'savings',
+          isOver ? '🚨 储蓄超支预警' : '⚠️ 储蓄节约提醒',
+          isOver
+            ? `当前结余 ${SavingsMod.fmt(ev.balance)} 低于理论预期结余 ${SavingsMod.fmt(ev.theory)} 的 80%，已严重超支，请尽快调整收支。`
+            : `支出消耗进度已达 ${Math.round(ev.progress * 100)}%，请注意节约开支。`,
+          'savings', '', 0);
       }
     }
-    // 大额支出提示
-    const bigTxn = txns.filter(t => +t.amount >= 1000).sort((a, b) => b.amount - a.amount)[0];
-    if (bigTxn) add('生活提醒', 'savings', `💰 大额支出记录`, `本月有一笔 ¥${bigTxn.amount.toFixed(2)} 的支出（${bigTxn.category}），记得核对。`, 'savings', '', bigTxn.id);
 
     // 4. 生活物资 — 物品到期 / 闲置 / 花草枯萎
     Store.get('goods_c1').forEach(g => {
