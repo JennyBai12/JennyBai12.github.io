@@ -409,7 +409,7 @@ const NewsMod = {
     { name: '新浪新闻', url: 'https://rss.sina.com.cn/news/china/focus15.xml', contentCat: '社会',     sourceCat: '权威新闻平台', enabled: true },
   ],
 
-  CRAWL_INTERVAL_MS: 2 * 60 * 60 * 1000,   // 2 小时
+  CRAWL_INTERVAL_MS: 60 * 60 * 1000,   // 1 小时
   LAST_CRAWL_KEY: 'bb_news_last_crawl',
 
   sources() {
@@ -638,7 +638,7 @@ const NewsMod = {
           read: false, actionModule: 'hotspot', actionSub: 'feed', actionId: 0, auto: true
         });
         if (App.refreshNotifications) App.refreshNotifications();
-        if (App.currentModule === 'news') App.render();
+        if (App.currentModule === 'hotspot') App.render();
       }
     } catch (e) { /* 静默失败，等待下一轮 */ }
   },

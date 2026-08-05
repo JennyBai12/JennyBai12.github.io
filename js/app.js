@@ -16,7 +16,7 @@ const App = {
     { id: 'reminders', icon: '⏰', label: 'reminders' },
     { id: 'calendar', icon: '📅', label: 'calendar' },
   ],
-  APP_VERSION: 'v37',
+  APP_VERSION: 'v38',
 
   /* 版本更新说明：新版本上线后首次打开自动弹窗展示，并同步推送至收件箱 */
   CHANGELOG: {
@@ -78,6 +78,11 @@ const App = {
       '🔥 修复热点资讯通知点击跳转：收件箱「热点资讯已更新」消息原先跳转到不存在的 news 模块，现在正确进入「热点资讯」资讯流',
       '🔥 修复热点模块子标签同步：从收件箱进入热点时自动切换到「资讯流」标签',
       '🔥 优化「上次抓取」时间显示：增加数据兜底，并同时展示相对时间 + 绝对北京时间，避免只显示「N 小时前」导致误判为旧数据'
+    ],
+    'v38': [
+      '🧹 自动清理历史坏热点通知：v37 之前推送的「热点资讯已更新」通知 actionModule 字段是错的（"news"），点击会进「模块开发中」。v38 升级时自动删除这些坏通知（保留正常的 actionModule="hotspot" 通知），下次收到新通知点击就会正确进入热点资讯流',
+      '🔄 修复 autoCrawl 后无法自动刷新当前热点模块：之前代码误把模块 id 写成 "news"（应为 "hotspot"），导致后台抓取完成后如果你正在热点模块，列表不会自动更新。v38 已修正',
+      '⏱️ 热点自动抓取周期 2 小时 → 1 小时：让资讯库更「最新」'
     ]
   },
 
@@ -105,9 +110,13 @@ const App = {
     // 同步推送至收件箱：仅真实版本升级时推送一次，避免重复；从点击版本号手动重看时不重复推送
     const pushedKey = 'versionInboxPushed';
     if (!force && Store.getSetting(pushedKey, '') !== this.APP_VERSION) {
-      // 清理旧版本通知：避免 v35 之前的 UTC 时间消息继续显示错误时间
+      // 清理「系统通知」+「历史坏热点通知」：避免 v35 之前的 UTC 时间消息、v37 之前 actionModule='news' 的热点通知继续显示错误跳转
       const inbox = Store.get('inbox');
-      const cleaned = inbox.filter(i => !(i.type === '系统通知' && /已更新到\s*v\d+/i.test(String(i.title || ''))));
+      const cleaned = inbox.filter(i => {
+        if (i.type === '系统通知' && /已更新到\s*v\d+/i.test(String(i.title || ''))) return false;
+        if (i.type === 'info' && /热点资讯已更新/.test(String(i.title || '')) && i.actionModule !== 'hotspot') return false;
+        return true;
+      });
       if (cleaned.length !== inbox.length) Store.save('inbox', cleaned);
       Store.add('inbox', {
         type: '系统通知', source: 'system',
