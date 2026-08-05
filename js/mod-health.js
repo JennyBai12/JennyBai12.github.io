@@ -642,27 +642,32 @@ const HealthMod = {
   addPosture() {
     App.openModal(`
       <div class="modal-title">体态AI检测</div>
-      <div class="form-group"><label class="form-label">📷 上传体态照片</label>
+      <div class="form-group"><label class="form-label">📷 上传体态照片（可多选）</label>
         <div class="img-upload-area" onclick="HealthMod.uploadPostureImg()">上传正面/侧面照</div>
         <div id="posture-imgs"></div>
       </div>
       <div id="posture-ai-area"></div>
       <div class="modal-actions">
         <button class="btn-cancel" onclick="App.closeModal()">${I18n.t('cancel')}</button>
+        <button class="btn-outline" onclick="HealthMod.savePosture()">💾 保存报告</button>
         <button class="btn-confirm" onclick="HealthMod.startPostureAI()">🔍 开始AI检测</button>
       </div>
     `);
     this._postureImgs = [];
+    this._postureAdvice = '';
   },
 
   uploadPostureImg() {
     const input = document.createElement('input');
-    input.type = 'file'; input.accept = 'image/*';
+    input.type = 'file'; input.accept = 'image/*'; input.multiple = true;
     input.onchange = () => {
-      Utils.readFileAsDataURL(input.files[0], (url) => {
+      const files = Array.from(input.files || []);
+      let pending = files.length;
+      if (!pending) return;
+      files.forEach(f => Utils.readFileAsDataURL(f, (url) => {
         HealthMod._postureImgs.push(url);
-        document.getElementById('posture-imgs').innerHTML = App.renderImageGrid(HealthMod._postureImgs, 'posture');
-      });
+        if (--pending === 0) document.getElementById('posture-imgs').innerHTML = App.renderImageGrid(HealthMod._postureImgs, 'posture');
+      }));
     };
     input.click();
   },
@@ -693,6 +698,8 @@ const HealthMod = {
             <div class="text-sm text-light mb-8">AI 观察：${Utils.escape(obsText)}</div>
             <div class="text-bold text-sm mb-8">请勾选你存在的体态问题（AI 已按线索预选，可增删）：</div>
             <div class="tag-pick" style="margin-bottom:4px;">${chips}</div>
+            <button class="btn btn-outline btn-sm" onclick="HealthMod.confirmPosture()">✅ 确认勾选并生成 AI 建议</button>
+            <div id="pt-advice-preview" class="mt-12"></div>
             <div class="text-sm text-light">说明：纯前端无法做精确骨骼识别，下列为「图像线索 + 你的确认」结合的辅助判断，最终以你勾选为准。</div>
             <div class="form-group mt-12"><label class="form-label">手动补充/覆盖备注（如：具体疼痛、动作受限）</label><textarea id="pt-manual" rows="2" placeholder="可填写你对照照片发现的具体问题"></textarea></div>
             <div class="form-group"><label class="form-label">自定义改善方案</label><textarea id="pt-plan" rows="2" placeholder="可覆盖 AI 建议"></textarea></div>
@@ -706,6 +713,8 @@ const HealthMod = {
         <div class="ocr-result">自动分析失败，可手动勾选问题后保存。</div>
         <div class="text-bold text-sm mb-8 mt-12">请勾选你存在的体态问题：</div>
         <div class="tag-pick" style="margin-bottom:4px;">${POSTURE_PROBLEMS.map(p => `<span class="tag posture-prob" data-pid="${p.id}" onclick="this.classList.toggle('active')">${p.name}</span>`).join('')}</div>
+        <button class="btn btn-outline btn-sm" onclick="HealthMod.confirmPosture()">✅ 确认勾选并生成 AI 建议</button>
+        <div id="pt-advice-preview" class="mt-12"></div>
         <div class="form-group mt-12"><label class="form-label">手动补充/覆盖备注</label><textarea id="pt-manual" rows="2"></textarea></div>
         <div class="form-group"><label class="form-label">自定义改善方案</label><textarea id="pt-plan" rows="2"></textarea></div>
         <div class="modal-actions"><button class="btn-cancel" onclick="App.closeModal()">${I18n.t('cancel')}</button><button class="btn-confirm" onclick="HealthMod.savePosture()">💾 保存报告</button></div>`;
@@ -721,15 +730,27 @@ const HealthMod = {
     // 只要有照片 / 勾选问题 / 手动备注其一即可保存（修复「报告无法储存」）
     if (!imgs.length && !problems.length && !manual) { App.showToast('请上传照片或勾选问题/备注后再保存', 'error'); return; }
     const analysis = problems.map(p => p.name).join('、') || (manual ? '（待补充具体问题）' : '');
-    const advice = plan || (problems.length ? problems.map(p => '· ' + p.name + '：' + p.advice).join('\n') : '');
+    const advice = plan || this._postureAdvice || (problems.length ? problems.map(p => '· ' + p.name + '：' + p.advice).join('\n') : '');
     Store.add('posture_records', {
       date: Utils.today(), images: imgs,
       aiAnalysis: analysis, aiAdvice: advice,
       manualNotes: manual, manualPlan: plan
     });
     Store.logChange('health', '体态检测', 0, '新增体态AI检测报告');
-    this._postureAI = null; this._postureImgs = [];
+    this._postureAI = null; this._postureImgs = []; this._postureAdvice = '';
     App.closeModal(); App.showToast(I18n.t('saved'), 'success'); App.render();
+  },
+
+  /* 根据已勾选的体态问题生成针对性 AI 建议并展示 */
+  confirmPosture() {
+    const probIds = Array.from(document.querySelectorAll('#posture-ai-area .posture-prob.active')).map(c => c.dataset.pid);
+    const problems = POSTURE_PROBLEMS.filter(p => probIds.includes(p.id));
+    if (!problems.length) { App.showToast('请先勾选你存在的体态问题', 'error'); return; }
+    const advice = problems.map(p => '· ' + p.name + '：' + p.advice).join('\n');
+    this._postureAdvice = advice;
+    const box = document.getElementById('pt-advice-preview');
+    if (box) box.innerHTML = `<div class="ai-report"><div class="ai-report-title">🤖 已根据你确认的内容生成 AI 建议</div><div class="ai-report-body"><pre style="white-space:pre-wrap;font-family:inherit;font-size:13px;">${Utils.escape(advice)}</pre></div></div>`;
+    App.showToast('已生成建议，可保存', 'success');
   },
 
   delPosture(id) { App.confirm(I18n.t('confirmDelete'), () => { Store.remove('posture_records', id); App.render(); }); },
@@ -817,21 +838,24 @@ const HealthMod = {
   addSkin() {
     App.openModal(`
       <div class="modal-title">皮肤AI检测</div>
-      <div class="form-group"><label class="form-label">📷 上传素颜照片</label><div class="img-upload-area" onclick="HealthMod.uploadSkinImg()">上传面部照片</div><div id="skin-imgs"></div></div>
+      <div class="form-group"><label class="form-label">📷 上传素颜照片（可多选）</label><div class="img-upload-area" onclick="HealthMod.uploadSkinImg()">上传面部照片</div><div id="skin-imgs"></div></div>
       <div id="skin-ai-area"></div>
-      <div class="modal-actions"><button class="btn-cancel" onclick="App.closeModal()">${I18n.t('cancel')}</button><button class="btn-confirm" onclick="HealthMod.startSkinAI()">🔍 开始AI检测</button></div>
+      <div class="modal-actions"><button class="btn-cancel" onclick="App.closeModal()">${I18n.t('cancel')}</button><button class="btn-outline" onclick="HealthMod.saveSkin()">💾 保存报告</button><button class="btn-confirm" onclick="HealthMod.startSkinAI()">🔍 开始AI检测</button></div>
     `);
     this._skinImgs = [];
   },
 
   uploadSkinImg() {
     const input = document.createElement('input');
-    input.type = 'file'; input.accept = 'image/*';
+    input.type = 'file'; input.accept = 'image/*'; input.multiple = true;
     input.onchange = () => {
-      Utils.readFileAsDataURL(input.files[0], (url) => {
+      const files = Array.from(input.files || []);
+      let pending = files.length;
+      if (!pending) return;
+      files.forEach(f => Utils.readFileAsDataURL(f, (url) => {
         HealthMod._skinImgs.push(url);
-        document.getElementById('skin-imgs').innerHTML = App.renderImageGrid(HealthMod._skinImgs, 'skin');
-      });
+        if (--pending === 0) document.getElementById('skin-imgs').innerHTML = App.renderImageGrid(HealthMod._skinImgs, 'skin');
+      }));
     };
     input.click();
   },

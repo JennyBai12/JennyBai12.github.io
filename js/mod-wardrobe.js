@@ -366,31 +366,43 @@ const WardrobeMod = {
     this._outfitAnalysis = null;
     this._outfitClothes = [];
     this._pickerSearch = '';
+    this._collapsed = {};
     App.openModal(`
       <div class="modal-title">➕ 穿搭打卡</div>
-      <div class="form-group"><label class="form-label">📷 上传今日穿搭照片</label>
+      <div class="form-group"><label class="form-label">📷 上传今日穿搭照片（可多选）</label>
         <div class="img-upload-area" onclick="WardrobeMod.uploadOutfit()">拍照 / 上传照片</div>
         <div id="outfit-imgs"></div>
       </div>
-      <div id="outfit-ai-area"></div>
-      <div class="form-group"><label class="form-label">选择今日穿着（按大类/小类，支持模糊搜索）</label><div id="outfit-wardrobe"></div></div>
+      <div class="form-group"><label class="form-label">🤖 照片识别（可选，默认不自动分析）</label>
+        <button class="btn btn-outline btn-sm" onclick="WardrobeMod.runOutfitAI()">用照片识别穿搭单品</button>
+        <div id="outfit-ai-area"></div>
+      </div>
+      <div class="form-group"><label class="form-label">选择今日穿着（先按大类，再展开小类；支持模糊搜索）</label>
+        <div class="picker-search"><input type="text" id="picker-kw" placeholder="🔍 模糊搜索：名称/颜色/类别/季节" oninput="WardrobeMod.onPickerSearch(this.value)"></div>
+        <div id="outfit-wardrobe-list"></div>
+      </div>
       <div class="form-group"><label class="form-label">备注</label><textarea id="outfit-note" rows="2" placeholder="如：通勤、约会、运动"></textarea></div>
       <div class="modal-actions"><button class="btn-cancel" onclick="App.closeModal()">${I18n.t('cancel')}</button><button class="btn-confirm" onclick="WardrobeMod.saveOutfit()">保存打卡</button></div>
     `);
     this.renderOutfitPicker();
   },
 
+  onPickerSearch(v) {
+    this._pickerSearch = (v || '').trim();
+    this.renderOutfitPicker();
+  },
+
   uploadOutfit() {
     const input = document.createElement('input');
-    input.type = 'file'; input.accept = 'image/*';
+    input.type = 'file'; input.accept = 'image/*'; input.multiple = true;
     input.onchange = () => {
-      const f = input.files[0];
-      if (!f) return;
-      Utils.readFileAsDataURL(f, (url) => {
+      const files = Array.from(input.files || []);
+      let pending = files.length;
+      if (!pending) return;
+      files.forEach(f => Utils.readFileAsDataURL(f, (url) => {
         this._outfitImages.push(url);
-        document.getElementById('outfit-imgs').innerHTML = App.renderImageGrid(this._outfitImages, 'outfit');
-        this.runOutfitAI();
-      });
+        if (--pending === 0) document.getElementById('outfit-imgs').innerHTML = App.renderImageGrid(this._outfitImages, 'outfit');
+      }));
     };
     input.click();
   },
@@ -487,7 +499,7 @@ const WardrobeMod = {
 
   /* ===== 今日穿着选择器：大类 → 小类 + 模糊搜索 ===== */
   renderOutfitPicker() {
-    const el = document.getElementById('outfit-wardrobe');
+    const el = document.getElementById('outfit-wardrobe-list');
     if (!el) return;
     const all = Store.filter('clothes', c => !c.archived && !c.isSecondhand);
     const kw = (this._pickerSearch || '').trim();
@@ -512,10 +524,6 @@ const WardrobeMod = {
     const selNames = selected.map(id => { const c = all.find(x => x.id === id); return c ? c.name : ''; }).filter(Boolean);
 
     el.innerHTML = `
-      <div class="picker-search">
-        <input type="text" id="picker-kw" placeholder="🔍 模糊搜索：名称/颜色/类别/季节" value="${Utils.escape(kw)}"
-          oninput="WardrobeMod._pickerSearch=this.value;WardrobeMod.renderOutfitPicker();WardrobeMod._focusPicker();">
-      </div>
       <div class="picker-selected">已选 ${selected.length} 件${selNames.length ? '：' + Utils.escape(selNames.join('、')) : ''}
         ${selected.length ? ` <span style="color:#C08B7D;cursor:pointer;" onclick="WardrobeMod.clearOutfitPick()">清空</span>` : ''}
       </div>
@@ -545,11 +553,6 @@ const WardrobeMod = {
             </div>`;
         }).join('')}
     `;
-  },
-
-  _focusPicker() {
-    const i = document.getElementById('picker-kw');
-    if (i) { i.focus(); const v = i.value; i.value = ''; i.value = v; }
   },
 
   toggleGroup(cat) {
