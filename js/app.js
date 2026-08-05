@@ -16,9 +16,9 @@ const App = {
     { id: 'reminders', icon: '⏰', label: 'reminders' },
     { id: 'calendar', icon: '📅', label: 'calendar' },
   ],
-  APP_VERSION: 'v29',
+  APP_VERSION: 'v30',
 
-  /* 版本更新说明：新版本上线后首次打开自动弹窗展示 */
+  /* 版本更新说明：新版本上线后首次打开自动弹窗展示，并同步推送至收件箱 */
   CHANGELOG: {
     'v27': [
       '右下角新增常驻版本号，便于确认是否已加载最新版',
@@ -29,6 +29,10 @@ const App = {
       '💰 快照式存档：登记结余 + 月收入 + 月支出，每次生成独立且永久锁定的存档快照',
       '💰 月度进度监测：展示消耗进度、目标结余差值、正常 / 节约预警 / 超支预警三态标签',
       '💰 触发预警时自动弹窗并推送至收件箱；历史存档仅展示时间 / 结余 / 收支，不暴露单笔流水'
+    ],
+    'v30': [
+      '📣 版本更新说明新增「收件箱同步」：每次自动弹出更新说明的同时，自动推送一条「已更新到 v30」消息到收件箱（含本次更新内容），可在收件箱随时回看',
+      '📣 点击右下角版本号可随时重看历史更新说明'
     ]
   },
 
@@ -43,15 +47,29 @@ const App = {
       .sort((a, b) => this._verNum(a) - this._verNum(b));
     if (!versions.length) { Store.setSetting('seenVersion', this.APP_VERSION); return; }
     const lines = [];
+    const plain = [];
     versions.forEach(v => {
       lines.push(`<div class="changelog-ver">【${Utils.escape(v)}】</div>`);
-      this.CHANGELOG[v].forEach(c => lines.push(`<div class="changelog-line">· ${Utils.escape(c)}</div>`));
+      this.CHANGELOG[v].forEach(c => { lines.push(`<div class="changelog-line">· ${Utils.escape(c)}</div>`); plain.push(c); });
     });
     App.openModal(`
       <div class="modal-title">🎉 已更新到 ${Utils.escape(this.APP_VERSION)}</div>
       <div class="changelog-box">${lines.join('')}</div>
       <div class="modal-actions"><button class="btn-confirm" onclick="App.closeModal()">知道了</button></div>
     `);
+    // 同步推送至收件箱：仅真实版本升级时推送一次，避免重复；从点击版本号手动重看时不重复推送
+    const pushedKey = 'versionInboxPushed';
+    if (!force && Store.getSetting(pushedKey, '') !== this.APP_VERSION) {
+      Store.add('inbox', {
+        type: '系统通知', source: 'system',
+        title: `🎉 已更新到 ${this.APP_VERSION}`,
+        content: `本次更新内容：${plain.join('；')}`,
+        date: Utils.now(), read: false,
+        actionModule: '', actionSub: '', actionId: 0,
+        auto: false
+      });
+      Store.setSetting(pushedKey, this.APP_VERSION);
+    }
     Store.setSetting('seenVersion', this.APP_VERSION);
   },
 
@@ -805,7 +823,7 @@ const App = {
 
     // 6. 系统通知
     if (Cloud.lastSyncAt) add('系统通知', 'system', '☁️ 云端同步完成', `数据已于 ${Cloud.lastSyncAt.slice(0, 16).replace('T', ' ')} 同步至云端。`, '', '', 0);
-    add('系统通知', 'system', '📱 版本更新', '白白的日记已更新至最新版本，享受更稳定的服务。', '', '', 0);
+    // 注：版本更新说明改为在 maybeShowChangelog() 中真实升级时同步推送至收件箱（含本次更新内容），不再在此每日生成空泛的版本提示
 
     // 一次性写入：合并保留的手动通知 + 新生成的自动通知
     if (newItems.length > 0 || kept.length !== inbox.length) {
