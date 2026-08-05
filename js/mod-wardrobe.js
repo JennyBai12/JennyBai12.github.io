@@ -404,30 +404,40 @@ const WardrobeMod = {
     return '冬';
   },
 
-  /* 根据照片配色 + 季节，推测衣橱中今天可能穿的衣物 */
+  /* 根据照片配色（上/下分区）+ 季节，推测衣橱中今天可能穿的衣物
+   * 上半身颜色 → 上衣/外套/配饰；下半身颜色 → 裤装/裙装；其余 → 整体配色 */
   matchClothesByPhoto(analysis) {
     const clothes = Store.filter('clothes', c => !c.archived && !c.isSecondhand);
-    if (!clothes.length || !analysis || !analysis.dominant || !analysis.dominant.length) return [];
+    if (!clothes.length || !analysis || !analysis.dominant || !analysis.dominant.length) return { tops: [], bottoms: [], others: [] };
     const season = this.curSeason();
-    const results = clothes.map(cl => {
-      const rgb = this.COLOR_RGB[cl.color] || null;
-      let colorScore = 0, matchedRatio = 0;
-      if (rgb) {
-        analysis.dominant.forEach(d => {
-          const dist = Math.sqrt((rgb[0] - d.r) ** 2 + (rgb[1] - d.g) ** 2 + (rgb[2] - d.b) ** 2);
-          // 距离 0~441，转成 0~1 的相似度
-          const sim = Math.max(0, 1 - dist / 190);
-          const s = sim * (0.4 + d.ratio);      // 占比越大权重越高
-          if (s > colorScore) { colorScore = s; matchedRatio = d.ratio; }
-        });
-      }
-      let score = colorScore * 100;
-      if (cl.season === season || cl.season === '四季') score += 12;
-      else score -= 10;
-      if (cl.annualCount > 0) score += Math.min(8, cl.annualCount);  // 常穿的更可能
-      return { cl, score: Math.round(score), ratio: matchedRatio };
+    const upperDom = (analysis.regions && analysis.regions.top && analysis.regions.top.dominant.length) ? analysis.regions.top.dominant : analysis.dominant;
+    const lowerDom = (analysis.regions && analysis.regions.bottom && analysis.regions.bottom.dominant.length) ? analysis.regions.bottom.dominant : analysis.dominant;
+    const upperCats = ['上衣', '外套', '配饰'];
+    const lowerCats = ['裤装', '裙装'];
+    const scoreFor = (cl, dom) => {
+      const rgb = this.COLOR_RGB[cl.color];
+      if (!rgb) return { score: 0, ratio: 0 };
+      let best = 0, ratio = 0;
+      dom.forEach(d => {
+        const dist = Math.sqrt((rgb[0] - d.r) ** 2 + (rgb[1] - d.g) ** 2 + (rgb[2] - d.b) ** 2);
+        const sim = Math.max(0, 1 - dist / 190);
+        const s = sim * (0.4 + d.ratio);
+        if (s > best) { best = s; ratio = d.ratio; }
+      });
+      let score = best * 100;
+      if (cl.season === season || cl.season === '四季') score += 12; else score -= 10;
+      if (cl.annualCount > 0) score += Math.min(8, cl.annualCount);
+      return { score: Math.max(0, Math.round(score)), ratio };
+    };
+    const evalGroup = (list, dom) => list.map(cl => {
+      const r = scoreFor(cl, dom);
+      return { cl, score: r.score, ratio: r.ratio };
     }).filter(x => x.score >= 32).sort((a, b) => b.score - a.score).slice(0, 6);
-    return results;
+    return {
+      tops: evalGroup(clothes.filter(c => upperCats.includes(c.category)), upperDom),
+      bottoms: evalGroup(clothes.filter(c => lowerCats.includes(c.category)), lowerDom),
+      others: evalGroup(clothes.filter(c => !upperCats.includes(c.category) && !lowerCats.includes(c.category)), analysis.dominant),
+    };
   },
 
   async runOutfitAI() {
@@ -438,28 +448,29 @@ const WardrobeMod = {
     try {
       const a = await Utils.analyzeImage(this._outfitImages[this._outfitImages.length - 1], { clothing: true });
       this._outfitAnalysis = a;
-      const guesses = this.matchClothesByPhoto(a);
+      const groups = this.matchClothesByPhoto(a);
       const mainName = this.nearestColorName(a.topColor);
       const styleTip = a.brightness > 68 ? '整体明亮清爽，适合日常通勤/出街'
         : a.brightness < 38 ? '整体偏暗沉稳，适合正式场合'
         : '明暗均衡，百搭日常';
       const contrastTip = a.contrast > 32 ? '配色对比强烈，视觉层次分明' : '配色柔和统一，整体协调';
-      area.innerHTML = `<div class="ai-report"><div class="ai-report-title">🎨 AI 穿搭识别（基于实际照片像素）</div><div class="ai-report-body">
+      const guessChips = (list) => list.length ? list.map(g => `<span class="picker-chip" id="guess-${g.cl.id}" onclick="WardrobeMod.pickGuess(${g.cl.id})">
+              ${g.cl.image ? `<img src="${g.cl.image}">` : ''}${Utils.escape(g.cl.name)}
+              <span style="opacity:.6;font-size:11px;">${g.score}%</span>
+            </span>`).join('') : '<span class="text-sm text-light">未识别到匹配单品</span>';
+      const hasAny = groups.tops.length || groups.bottoms.length || groups.others.length;
+      area.innerHTML = `<div class="ai-report"><div class="ai-report-title">🎨 AI 穿搭识别（基于实际照片像素 + 区域配色）</div><div class="ai-report-body">
         <div>主色调：<span class="color-swatch" style="background:${Utils.hexOf(a.topColor)};vertical-align:middle;"></span> ${mainName}（${Utils.hexOf(a.topColor)}）</div>
         <div class="mt-8">配色构成：</div>${Utils.paletteHTML(a)}
         <div class="mt-8 text-sm">整体亮度 ${a.brightness}/100 · 对比度 ${a.contrast}/100</div>
         <div class="text-sm">${styleTip}；${contrastTip}。</div>
-        ${guesses.length ? `
-          <div class="divider" style="margin:8px 0;"></div>
-          <div class="text-bold text-sm mb-8">👗 疑似识别到你衣橱中的这些单品（点击即勾选）：</div>
-          <div class="picker-items">
-            ${guesses.map(g => `<span class="picker-chip" id="guess-${g.cl.id}" onclick="WardrobeMod.pickGuess(${g.cl.id})">
-              ${g.cl.image ? `<img src="${g.cl.image}">` : ''}${Utils.escape(g.cl.name)}
-              <span style="opacity:.6;font-size:11px;">${g.score}%</span>
-            </span>`).join('')}
-          </div>
-          <div class="text-sm text-light mt-8">匹配依据：照片主色与衣物登记颜色的接近度 + 当季适配度。识别仅供参考，请核对后勾选。</div>
-        ` : '<div class="text-sm text-light mt-8">未能匹配到衣橱单品（可为衣物补充「颜色」与照片以提升识别率）。</div>'}
+        <div class="divider" style="margin:8px 0;"></div>
+        <div class="text-bold text-sm mb-8">👕 识别到的上衣 / 外套（按照片上半身配色）：</div>
+        <div class="picker-items">${guessChips(groups.tops)}</div>
+        <div class="text-bold text-sm mb-8 mt-12">👖 识别到的下装（按照片下半身配色）：</div>
+        <div class="picker-items">${guessChips(groups.bottoms)}</div>
+        ${groups.others.length ? `<div class="text-bold text-sm mb-8 mt-12">👜 其他（鞋 / 包 / 配饰）：</div><div class="picker-items">${guessChips(groups.others)}</div>` : ''}
+        <div class="text-sm text-light mt-8">识别依据：照片上半身/下半身主色与衣橱单品登记颜色的接近度 + 当季适配度。识别为辅助参考，请核对后点击单品即可勾选记录穿着。</div>
       </div></div>`;
     } catch (e) {
       area.innerHTML = '<div class="ocr-result">配色分析失败，可继续手动勾选保存。</div>';

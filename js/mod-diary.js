@@ -90,13 +90,16 @@ const DiaryMod = {
 
   unlock() {
     if (!this.hasPassword()) { this._unlocked = true; App.render(); return; }
+    const hint = Store.getSetting('diaryPwHint', '');
     App.openModal(`
       <div class="lock-box">
         <div class="lock-icon">🔒</div>
         <div class="modal-title" style="margin:0;">私密日记已加密</div>
         <div class="lock-tip">请输入密码后查看</div>
+        ${hint ? `<div class="lock-hint">💡 提示：${Utils.escape(hint)}</div>` : ''}
         <input type="password" id="lock-pwd" placeholder="请输入密码" style="text-align:center;letter-spacing:2px;" onkeydown="if(event.key==='Enter')DiaryMod.doUnlock()">
         <div id="lock-err" class="text-sm" style="color:#C08B7D;height:18px;margin-top:6px;"></div>
+        <div class="lock-forgot" onclick="DiaryMod.recoverPassword()">忘记密码？</div>
       </div>
       <div class="modal-actions">
         <button class="btn-cancel" onclick="App.closeModal()">${I18n.t('cancel')}</button>
@@ -122,14 +125,21 @@ const DiaryMod = {
 
   passwordSettings() {
     const has = this.hasPassword();
+    const q = Store.getSetting('diaryPwQuestion', '');
+    const hint = Store.getSetting('diaryPwHint', '');
     App.openModal(`
       <div class="modal-title">🔐 私密日记密码</div>
       <div class="text-sm text-light mb-8">${has ? '已设置密码。修改或清除密码需先验证原密码。' : '设置后，标记为「私密」的日记需输入密码才能查看。'}</div>
       ${has ? `<div class="form-group"><label class="form-label">原密码</label><input type="password" id="pw-old" placeholder="请输入原密码"></div>` : ''}
       <div class="form-group"><label class="form-label">${has ? '新密码' : '设置密码'}</label><input type="password" id="pw-new" placeholder="4-20 位，建议数字+字母"></div>
       <div class="form-group"><label class="form-label">确认密码</label><input type="password" id="pw-new2" placeholder="再次输入"></div>
+      <div class="divider" style="margin:10px 0;"></div>
+      <div class="text-bold text-sm mb-8">🔑 找回方式（忘记密码时使用）</div>
+      <div class="form-group"><label class="form-label">找回问题</label><input type="text" id="pw-question" value="${Utils.escape(q)}" placeholder="如：我小学的名字是？"></div>
+      <div class="form-group"><label class="form-label">找回答案</label><input type="text" id="pw-answer" placeholder="${has ? '留空表示不修改找回答案' : '设置一个只有你知道的答案'}"></div>
+      <div class="form-group"><label class="form-label">密码提示（解锁时显示）</label><input type="text" id="pw-hint" value="${Utils.escape(hint)}" placeholder="如：生日+名字缩写"></div>
       <div id="pw-err" class="text-sm" style="color:#C08B7D;height:18px;"></div>
-      <div class="text-sm text-light">提示：密码仅保存在本设备浏览器中，忘记后可在此处清除（清除会解除所有私密日记的加密）。</div>
+      <div class="text-sm text-light">提示：密码、找回答案与提示仅保存在本设备浏览器中。</div>
       <div class="modal-actions">
         <button class="btn-cancel" onclick="App.closeModal()">${I18n.t('cancel')}</button>
         ${has ? `<button class="btn btn-cancel btn-sm" onclick="DiaryMod.clearPassword()">清除密码</button>` : ''}
@@ -150,6 +160,18 @@ const DiaryMod = {
     if (a.length < 4 || a.length > 20) { err('密码长度需为 4-20 位'); return; }
     if (a !== b) { err('两次输入的密码不一致'); return; }
     Store.setSetting('diaryPassword', this._hash(a));
+    // 找回方式 + 提示
+    const question = (document.getElementById('pw-question').value || '').trim();
+    const answer = (document.getElementById('pw-answer').value || '').trim();
+    const hint = (document.getElementById('pw-hint').value || '').trim();
+    Store.setSetting('diaryPwHint', hint);
+    if (question) {
+      Store.setSetting('diaryPwQuestion', question);
+      if (answer) Store.setSetting('diaryPwAnswerHash', this._hash(answer.toLowerCase().trim()));
+    } else {
+      Store.setSetting('diaryPwQuestion', '');
+      Store.setSetting('diaryPwAnswerHash', '');
+    }
     this._unlocked = true;
     App.closeModal(); App.showToast('密码已保存', 'success'); App.render();
   },
@@ -162,9 +184,67 @@ const DiaryMod = {
     }
     App.confirm('清除后，所有私密日记将不再需要密码即可查看。确定继续吗？', () => {
       Store.setSetting('diaryPassword', '');
+      Store.setSetting('diaryPwQuestion', '');
+      Store.setSetting('diaryPwAnswerHash', '');
+      Store.setSetting('diaryPwHint', '');
       DiaryMod._unlocked = true;
       App.closeModal(); App.showToast('密码已清除', 'success'); App.render();
     }, '清除密码');
+  },
+
+  /* ===== 找回密码 ===== */
+  recoverPassword() {
+    const question = Store.getSetting('diaryPwQuestion', '');
+    const answerHash = Store.getSetting('diaryPwAnswerHash', '');
+    if (!question || !answerHash) {
+      App.openModal(`
+        <div class="modal-title">🔑 找回密码</div>
+        <div class="card" style="border-left:3px solid #E8A87C;">
+          <div class="text-sm">你还没有设置「找回问题 / 答案」，无法通过此方式找回。</div>
+          <div class="text-sm mt-8">若确实忘记密码，只能<span style="color:#C08B7D;">清除密码并解除所有私密日记的加密</span>（私密日记内容将变为公开可见）。</div>
+        </div>
+        <div class="modal-actions">
+          <button class="btn-cancel" onclick="App.closeModal()">返回</button>
+          <button class="btn-danger" onclick="DiaryMod.forceResetPassword()">清除密码并解锁</button>
+        </div>
+      `);
+      return;
+    }
+    App.openModal(`
+      <div class="modal-title">🔑 找回密码</div>
+      <div class="form-group"><label class="form-label">问题</label><div class="text-bold">${Utils.escape(question)}</div></div>
+      <div class="form-group"><label class="form-label">你的答案</label><input type="text" id="rec-answer" placeholder="请输入找回答案" onkeydown="if(event.key==='Enter')DiaryMod.doRecover()"></div>
+      <div id="rec-err" class="text-sm" style="color:#C08B7D;height:18px;"></div>
+      <div class="modal-actions">
+        <button class="btn-cancel" onclick="App.closeModal()">取消</button>
+        <button class="btn-confirm" onclick="DiaryMod.doRecover()">验证</button>
+      </div>
+    `);
+    setTimeout(() => { const i = document.getElementById('rec-answer'); if (i) i.focus(); }, 60);
+  },
+
+  doRecover() {
+    const ans = (document.getElementById('rec-answer').value || '').trim().toLowerCase();
+    const answerHash = Store.getSetting('diaryPwAnswerHash', '');
+    if (this._hash(ans) === answerHash) {
+      this._unlocked = true;
+      App.closeModal();
+      App.showToast('验证成功，请重新设置密码', 'success');
+      this.passwordSettings();
+    } else {
+      const e = document.getElementById('rec-err'); if (e) e.textContent = '答案不正确';
+    }
+  },
+
+  forceResetPassword() {
+    App.confirm('确认清除密码并解除所有私密日记加密？私密内容将变为公开可见，此操作不可撤销。', () => {
+      Store.setSetting('diaryPassword', '');
+      Store.setSetting('diaryPwQuestion', '');
+      Store.setSetting('diaryPwAnswerHash', '');
+      Store.setSetting('diaryPwHint', '');
+      this._unlocked = true;
+      App.closeModal(); App.showToast('已清除密码并解锁', 'success'); App.render();
+    }, '清除并解锁');
   },
 
   search(kw) { this.searchKw = kw; App.render(); },

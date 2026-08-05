@@ -1,4 +1,17 @@
 /* ===== 健康模块（家庭成员档案 + 体态AI + 皮肤AI + 体检档案 + 围度记录 + 健康总结） ===== */
+
+/* 常见体态问题库：AI 辅助识别时列出，并自动给出针对性矫正建议 */
+const POSTURE_PROBLEMS = [
+  { id: 'head', name: '头前伸', advice: '收下巴练习：坐直后水平后缩下巴至双下巴感，保持5秒，每组15次，每日3组；使用手机/电脑时屏幕抬至视线水平。' },
+  { id: 'round', name: '圆肩', advice: '肩胛骨后缩夹笔练习：双臂自然下垂，两侧肩胛骨向内向下收紧，保持10秒，每组12次；日常避免含胸。' },
+  { id: 'hunch', name: '驼背', advice: '靠墙站立：后脑勺、肩胛骨、臀部、脚跟贴墙，每日10分钟；加强背肌（划船、超人式）训练。' },
+  { id: 'shoulder', name: '高低肩', advice: '对镜观察双肩是否等高；若长期单侧背包/惯用单侧，改为双肩交替；可配合拉伸较高一侧的斜方肌。' },
+  { id: 'pelvis', name: '骨盆前倾', advice: '核心与臀肌训练（平板支撑、臀桥）；拉伸髂腰肌与竖脊肌；避免久坐与翘二郎腿。' },
+  { id: 'spine', name: '脊柱侧弯', advice: '建议到骨科/康复科做专业评估与X光检查；日常保持对称坐姿，加强核心稳定训练。' },
+  { id: 'knee', name: '膝超伸', advice: '加强大腿后侧与臀部力量；站立时微屈膝盖避免锁死；瑜伽中注意腿部发力顺序。' },
+  { id: 'leg', name: 'X/O型腿', advice: '针对性肌力平衡训练（内收/外展）；严重者可咨询康复科评估，必要时使用矫形辅具。' },
+];
+
 const HealthMod = {
   subTab: 'records',
   medMemberFilter: 0,  // 0=全部, >0=指定成员
@@ -593,10 +606,13 @@ const HealthMod = {
     document.getElementById('health-sub').innerHTML = `
       <div class="flex-between mb-12">
         <div class="subsection-title" style="margin:0;">体态AI管理</div>
-        <button class="btn btn-primary btn-sm" onclick="HealthMod.addPosture()">+ 检测</button>
+        <div class="flex gap-8">
+          <button class="btn btn-outline btn-sm" onclick="HealthMod.comparePosture()">📊 照片对比</button>
+          <button class="btn btn-primary btn-sm" onclick="HealthMod.addPosture()">+ 检测</button>
+        </div>
       </div>
       <div class="card">
-        <div class="text-sm text-light">上传体态照片，AI自动识别驼背、骨盆前倾、高低肩、头前伸、脊柱侧弯等问题，输出矫正建议。</div>
+        <div class="text-sm text-light">上传体态照片，AI 辅助识别头前伸、圆肩、驼背、高低肩、骨盆前倾、脊柱侧弯等问题，并可保存照片用于日后任意日期对比。</div>
       </div>
       ${records.map(r => `
         <div class="card">
@@ -607,12 +623,13 @@ const HealthMod = {
               <button class="btn btn-cancel btn-sm" onclick="HealthMod.delPosture(${r.id})">✕</button>
             </div>
           </div>
+          ${r.images && r.images.length ? `<div class="img-grid mb-8">${r.images.map(img => `<img class="img-thumb" src="${img}" onclick="App.openImageViewer('${img}')">`).join('')}</div>` : ''}
           <div class="ai-report">
             <div class="ai-report-title">🤖 AI分析报告</div>
             <div class="ai-report-body">
-              <div class="text-bold mb-8">检测到的问题：${Utils.escape(r.aiAnalysis)}</div>
+              <div class="text-bold mb-8">检测到的问题：${Utils.escape(r.aiAnalysis || '（未识别到具体问题，可手动补充）')}</div>
               <div>矫正建议：</div>
-              <pre style="white-space:pre-wrap;font-family:inherit;font-size:13px;">${Utils.escape(r.aiAdvice)}</pre>
+              <pre style="white-space:pre-wrap;font-family:inherit;font-size:13px;">${Utils.escape(r.aiAdvice || '')}</pre>
             </div>
           </div>
           ${r.manualNotes ? `<div class="mt-12"><div class="text-bold text-sm">📝 手动备注</div><div class="text-sm">${Utils.escape(r.manualNotes)}</div></div>` : ''}
@@ -657,47 +674,57 @@ const HealthMod = {
     area.innerHTML = '<div class="ocr-loading"><div class="ocr-spinner"></div>AI 分析照片中...</div>';
     try {
       const a = await Utils.analyzeImage(imgs[imgs.length - 1]);
+      const sym = a.symmetry;
       const obs = [];
       if (a.brightness < 35) obs.push('拍摄光线偏暗，建议充足光线下重拍以便观察轮廓');
       else if (a.brightness > 88) obs.push('画面过亮/偏白，注意曝光');
       if (a.contrast < 12) obs.push('对比度偏低，身体轮廓不够清晰');
-      obs.push('请对照照片自行检查：头颈是否中立、双肩是否等高、脊柱是否居中');
-      const analysis = obs.join('；');
-      const advice = '1. 靠墙站立每日10分钟，后脑勺、肩胛骨、臀部贴墙\n2. 收下巴练习每组15次，每日3组\n3. 肩胛骨收缩训练，改善圆肩\n4. 避免长时间低头看手机\n5. 建议每月同角度复查对比改善情况';
+      // 左右对称度作为体态线索：偏低时预选「高低肩/脊柱侧弯」
+      let auto = [];
+      if (sym < 78) { auto = ['shoulder', 'spine']; obs.push(`左右对称度 ${sym}/100 偏低，疑似高低肩或脊柱侧弯，请重点核对`); }
+      else obs.push(`左右对称度 ${sym}/100，整体基本对称`);
+      const obsText = obs.join('；');
+      const chips = POSTURE_PROBLEMS.map(p => `<span class="tag posture-prob ${auto.includes(p.id) ? 'active' : ''}" data-pid="${p.id}" onclick="this.classList.toggle('active')">${p.name}</span>`).join('');
       area.innerHTML = `
         <div class="ai-report">
-          <div class="ai-report-title">✅ AI 分析完成（基于实际照片像素）</div>
+          <div class="ai-report-title">✅ AI 辅助识别完成（基于实际照片像素）</div>
           <div class="ai-report-body">
-            <div class="text-bold mb-8">图像指标：亮度 ${a.brightness}/100 · 对比度 ${a.contrast}/100 · ${a.width}×${a.height}</div>
-            <div>观察提示：${Utils.escape(analysis)}</div>
-            <div class="mt-8">矫正建议：</div>
-            <pre style="white-space:pre-wrap;font-family:inherit;font-size:13px;">${Utils.escape(advice)}</pre>
+            <div class="text-bold mb-8">图像指标：亮度 ${a.brightness}/100 · 对比度 ${a.contrast}/100 · 左右对称度 ${sym}/100 · ${a.width}×${a.height}</div>
+            <div class="text-sm text-light mb-8">AI 观察：${Utils.escape(obsText)}</div>
+            <div class="text-bold text-sm mb-8">请勾选你存在的体态问题（AI 已按线索预选，可增删）：</div>
+            <div class="tag-pick" style="margin-bottom:4px;">${chips}</div>
+            <div class="text-sm text-light">说明：纯前端无法做精确骨骼识别，下列为「图像线索 + 你的确认」结合的辅助判断，最终以你勾选为准。</div>
+            <div class="form-group mt-12"><label class="form-label">手动补充/覆盖备注（如：具体疼痛、动作受限）</label><textarea id="pt-manual" rows="2" placeholder="可填写你对照照片发现的具体问题"></textarea></div>
+            <div class="form-group"><label class="form-label">自定义改善方案</label><textarea id="pt-plan" rows="2" placeholder="可覆盖 AI 建议"></textarea></div>
+            <div class="modal-actions"><button class="btn-cancel" onclick="App.closeModal()">${I18n.t('cancel')}</button><button class="btn-confirm" onclick="HealthMod.savePosture()">💾 保存报告</button></div>
           </div>
-        </div>
-        <div class="form-group"><label class="form-label">手动补充/覆盖备注（如：头前伸、圆肩等）</label><textarea id="pt-manual" rows="2" placeholder="可填写你对照照片发现的具体问题"></textarea></div>
-        <div class="form-group"><label class="form-label">自定义改善方案</label><textarea id="pt-plan" rows="2" placeholder="可覆盖AI建议"></textarea></div>
-        <div class="modal-actions"><button class="btn-cancel" onclick="App.closeModal()">${I18n.t('cancel')}</button><button class="btn-confirm" onclick="HealthMod.savePosture()">💾 保存报告</button></div>
-      `;
-      this._postureAI = { analysis, advice };
+        </div>`;
+      this._postureAI = { problems: auto, analysis: '', advice: '' };
     } catch (e) {
-      this._postureAI = { analysis: '', advice: '' };
+      this._postureAI = { problems: [], analysis: '', advice: '' };
       area.innerHTML = `
-        <div class="ocr-result">自动分析失败，可手动填写报告后保存。</div>
-        <div class="form-group"><label class="form-label">手动补充/覆盖备注</label><textarea id="pt-manual" rows="2" placeholder="可填写你对照照片发现的具体问题"></textarea></div>
+        <div class="ocr-result">自动分析失败，可手动勾选问题后保存。</div>
+        <div class="text-bold text-sm mb-8 mt-12">请勾选你存在的体态问题：</div>
+        <div class="tag-pick" style="margin-bottom:4px;">${POSTURE_PROBLEMS.map(p => `<span class="tag posture-prob" data-pid="${p.id}" onclick="this.classList.toggle('active')">${p.name}</span>`).join('')}</div>
+        <div class="form-group mt-12"><label class="form-label">手动补充/覆盖备注</label><textarea id="pt-manual" rows="2"></textarea></div>
         <div class="form-group"><label class="form-label">自定义改善方案</label><textarea id="pt-plan" rows="2"></textarea></div>
-        <div class="modal-actions"><button class="btn-cancel" onclick="App.closeModal()">${I18n.t('cancel')}</button><button class="btn-confirm" onclick="HealthMod.savePosture()">💾 保存报告</button></div>
-      `;
+        <div class="modal-actions"><button class="btn-cancel" onclick="App.closeModal()">${I18n.t('cancel')}</button><button class="btn-confirm" onclick="HealthMod.savePosture()">💾 保存报告</button></div>`;
     }
   },
 
   savePosture() {
-    const ai = this._postureAI || { analysis: '', advice: '' };
-    const manual = document.getElementById('pt-manual')?.value || '';
-    const plan = document.getElementById('pt-plan')?.value || '';
-    if (!ai.analysis && !manual) { App.showToast('请填写备注后再保存', 'error'); return; }
+    const imgs = this._postureImgs || [];
+    const probIds = Array.from(document.querySelectorAll('#posture-ai-area .posture-prob.active')).map(c => c.dataset.pid);
+    const problems = POSTURE_PROBLEMS.filter(p => probIds.includes(p.id));
+    const manual = (document.getElementById('pt-manual')?.value || '').trim();
+    const plan = (document.getElementById('pt-plan')?.value || '').trim();
+    // 只要有照片 / 勾选问题 / 手动备注其一即可保存（修复「报告无法储存」）
+    if (!imgs.length && !problems.length && !manual) { App.showToast('请上传照片或勾选问题/备注后再保存', 'error'); return; }
+    const analysis = problems.map(p => p.name).join('、') || (manual ? '（待补充具体问题）' : '');
+    const advice = plan || (problems.length ? problems.map(p => '· ' + p.name + '：' + p.advice).join('\n') : '');
     Store.add('posture_records', {
-      date: Utils.today(), images: this._postureImgs || [],
-      aiAnalysis: ai.analysis, aiAdvice: ai.advice,
+      date: Utils.today(), images: imgs,
+      aiAnalysis: analysis, aiAdvice: advice,
       manualNotes: manual, manualPlan: plan
     });
     Store.logChange('health', '体态检测', 0, '新增体态AI检测报告');
@@ -706,6 +733,36 @@ const HealthMod = {
   },
 
   delPosture(id) { App.confirm(I18n.t('confirmDelete'), () => { Store.remove('posture_records', id); App.render(); }); },
+
+  /* 体态照片跨日期对比 */
+  comparePosture() {
+    const records = Store.get('posture_records').sort((a, b) => a.date.localeCompare(b.date));
+    if (records.length < 2) { App.showToast('至少需要两条体态记录才能对比', 'warn'); return; }
+    const opts = records.map(r => `<option value="${r.id}">${r.date}${r.images && r.images.length ? '（含照片）' : ''}</option>`).join('');
+    App.openModal(`
+      <div class="modal-title">📊 体态照片对比</div>
+      <div class="two-col">
+        <div class="form-group"><label class="form-label">日期A</label><select id="pp-a">${opts}</select></div>
+        <div class="form-group"><label class="form-label">日期B</label><select id="pp-b">${opts}</select></div>
+      </div>
+      <div id="pp-result"></div>
+      <div class="modal-actions"><button class="btn-cancel" onclick="App.closeModal()">${I18n.t('cancel')}</button><button class="btn-confirm" onclick="HealthMod.doComparePosture()">对比</button></div>
+    `);
+    const sA = document.getElementById('pp-a'), sB = document.getElementById('pp-b');
+    if (records.length >= 2) { sA.selectedIndex = records.length - 2; sB.selectedIndex = records.length - 1; }
+    this._doComparePosture();
+  },
+
+  _doComparePosture() {
+    const rA = Store.find('posture_records', r => r.id === +document.getElementById('pp-a').value);
+    const rB = Store.find('posture_records', r => r.id === +document.getElementById('pp-b').value);
+    const imgBlock = (r) => (r.images && r.images.length ? `<div class="img-grid">${r.images.map(i => `<img class="img-thumb" src="${i}">`).join('')}</div>` : '<div class="text-sm text-light">无照片</div>');
+    document.getElementById('pp-result').innerHTML = `
+      <div style="display:flex;gap:12px;flex-wrap:wrap;">
+        <div style="flex:1;min-width:140px;"><div class="text-bold text-sm mb-4">${rA.date}</div>${imgBlock(rA)}<div class="text-sm mt-8">问题：${Utils.escape(rA.aiAnalysis || '—')}</div></div>
+        <div style="flex:1;min-width:140px;"><div class="text-bold text-sm mb-4">${rB.date}</div>${imgBlock(rB)}<div class="text-sm mt-8">问题：${Utils.escape(rB.aiAnalysis || '—')}</div></div>
+      </div>`;
+  },
 
   editPosture(id) {
     const r = Store.find('posture_records', p => p.id === id);
@@ -735,17 +792,21 @@ const HealthMod = {
     document.getElementById('health-sub').innerHTML = `
       <div class="flex-between mb-12">
         <div class="subsection-title" style="margin:0;">皮肤AI管理</div>
-        <button class="btn btn-primary btn-sm" onclick="HealthMod.addSkin()">+ 检测</button>
+        <div class="flex gap-8">
+          <button class="btn btn-outline btn-sm" onclick="HealthMod.compareSkin()">📊 照片对比</button>
+          <button class="btn btn-primary btn-sm" onclick="HealthMod.addSkin()">+ 检测</button>
+        </div>
       </div>
-      <div class="card"><div class="text-sm text-light">上传素颜照片，AI识别痘痘、闭口、泛红、暗沉、毛孔粗大、敏感、干纹等问题。</div></div>
+      <div class="card"><div class="text-sm text-light">上传素颜照片，AI识别痘痘、闭口、泛红、暗沉、毛孔粗大、敏感、干纹等问题，并可保存照片用于日后任意日期对比。</div></div>
       ${records.map(r => `
         <div class="card">
           <div class="flex-between mb-8"><div class="text-bold">📅 ${r.date}</div>
             <div class="flex gap-8"><button class="btn btn-outline btn-sm" onclick="HealthMod.editSkin(${r.id})">${I18n.t('edit')}</button><button class="btn btn-cancel btn-sm" onclick="HealthMod.delSkin(${r.id})">✕</button></div>
           </div>
+          ${r.images && r.images.length ? `<div class="img-grid mb-8">${r.images.map(img => `<img class="img-thumb" src="${img}" onclick="App.openImageViewer('${img}')">`).join('')}</div>` : ''}
           <div class="ai-report">
             <div class="ai-report-title">🤖 AI分析报告</div>
-            <div class="ai-report-body"><div class="text-bold mb-8">检测到的问题：${Utils.escape(r.aiAnalysis)}</div><div>护肤建议：</div><pre style="white-space:pre-wrap;font-family:inherit;font-size:13px;">${Utils.escape(r.aiAdvice)}</pre></div>
+            <div class="ai-report-body"><div class="text-bold mb-8">检测到的问题：${Utils.escape(r.aiAnalysis || '（未识别到具体问题，可手动补充）')}</div><div>护肤建议：</div><pre style="white-space:pre-wrap;font-family:inherit;font-size:13px;">${Utils.escape(r.aiAdvice || '')}</pre></div>
           </div>
           ${r.manualNotes ? `<div class="mt-12"><div class="text-bold text-sm">📝 手动备注</div><div class="text-sm">${Utils.escape(r.manualNotes)}</div></div>` : ''}
         </div>
@@ -817,16 +878,50 @@ const HealthMod = {
 
   saveSkin() {
     const ai = this._skinAI || { analysis: '', advice: '' };
-    const manual = document.getElementById('sk-manual')?.value || '';
-    const plan = document.getElementById('sk-plan')?.value || '';
-    if (!ai.analysis && !manual) { App.showToast('请填写备注后再保存', 'error'); return; }
-    Store.add('skin_records', { date: Utils.today(), images: this._skinImgs || [], aiAnalysis: ai.analysis, aiAdvice: ai.advice, manualNotes: manual, manualPlan: plan });
+    const imgs = this._skinImgs || [];
+    const manual = (document.getElementById('sk-manual')?.value || '').trim();
+    const plan = (document.getElementById('sk-plan')?.value || '').trim();
+    // 只要有照片 / 识别到问题 / 手动备注其一即可保存（修复「报告无法储存」）
+    if (!imgs.length && !ai.analysis && !manual) { App.showToast('请上传照片或填写备注后再保存', 'error'); return; }
+    const analysis = ai.analysis || (manual ? '（待补充具体问题）' : '');
+    const advice = plan || ai.advice || '';
+    Store.add('skin_records', { date: Utils.today(), images: imgs, aiAnalysis: analysis, aiAdvice: advice, manualNotes: manual, manualPlan: plan });
     Store.logChange('health', '皮肤检测', 0, '新增皮肤AI检测报告');
     this._skinAI = null; this._skinImgs = [];
     App.closeModal(); App.showToast(I18n.t('saved'), 'success'); App.render();
   },
 
   delSkin(id) { App.confirm(I18n.t('confirmDelete'), () => { Store.remove('skin_records', id); App.render(); }); },
+
+  /* 皮肤照片跨日期对比 */
+  compareSkin() {
+    const records = Store.get('skin_records').sort((a, b) => a.date.localeCompare(b.date));
+    if (records.length < 2) { App.showToast('至少需要两条皮肤记录才能对比', 'warn'); return; }
+    const opts = records.map(r => `<option value="${r.id}">${r.date}${r.images && r.images.length ? '（含照片）' : ''}</option>`).join('');
+    App.openModal(`
+      <div class="modal-title">📊 皮肤照片对比</div>
+      <div class="two-col">
+        <div class="form-group"><label class="form-label">日期A</label><select id="sk-c-a">${opts}</select></div>
+        <div class="form-group"><label class="form-label">日期B</label><select id="sk-c-b">${opts}</select></div>
+      </div>
+      <div id="sk-c-result"></div>
+      <div class="modal-actions"><button class="btn-cancel" onclick="App.closeModal()">${I18n.t('cancel')}</button><button class="btn-confirm" onclick="HealthMod.doCompareSkin()">对比</button></div>
+    `);
+    const sA = document.getElementById('sk-c-a'), sB = document.getElementById('sk-c-b');
+    if (records.length >= 2) { sA.selectedIndex = records.length - 2; sB.selectedIndex = records.length - 1; }
+    this._doCompareSkin();
+  },
+
+  _doCompareSkin() {
+    const rA = Store.find('skin_records', r => r.id === +document.getElementById('sk-c-a').value);
+    const rB = Store.find('skin_records', r => r.id === +document.getElementById('sk-c-b').value);
+    const imgBlock = (r) => (r.images && r.images.length ? `<div class="img-grid">${r.images.map(i => `<img class="img-thumb" src="${i}">`).join('')}</div>` : '<div class="text-sm text-light">无照片</div>');
+    document.getElementById('sk-c-result').innerHTML = `
+      <div style="display:flex;gap:12px;flex-wrap:wrap;">
+        <div style="flex:1;min-width:140px;"><div class="text-bold text-sm mb-4">${rA.date}</div>${imgBlock(rA)}<div class="text-sm mt-8">问题：${Utils.escape(rA.aiAnalysis || '—')}</div></div>
+        <div style="flex:1;min-width:140px;"><div class="text-bold text-sm mb-4">${rB.date}</div>${imgBlock(rB)}<div class="text-sm mt-8">问题：${Utils.escape(rB.aiAnalysis || '—')}</div></div>
+      </div>`;
+  },
 
   editSkin(id) {
     const r = Store.find('skin_records', s => s.id === id);

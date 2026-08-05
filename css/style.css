@@ -747,3 +747,16 @@ input[type=radio], input[type=checkbox] { width: auto; margin-right: 6px; }
   width: 100%; padding: 10px 12px; font-size: 16px;
   border: 1px solid #A6B7A1; border-radius: 10px;
 }
+.lock-hint {
+  background: rgba(130,158,142,0.12); border: 1px dashed var(--accent);
+  border-radius: 10px; padding: 8px 12px; font-size: 13px; color: var(--text);
+  margin: 0 0 14px; text-align: left; line-height: 1.5;
+}
+.lock-forgot {
+  margin-top: 14px; font-size: 13px; color: var(--accent);
+  cursor: pointer; text-decoration: underline; display: inline-block;
+}
+.lock-forgot:hover { opacity: 0.8; }
+/* 体态问题勾选芯片：复用 .tag，这里仅做细微间距与可点反馈 */
+.posture-prob { user-select: none; }
+.posture-prob:active { transform: scale(0.96); }

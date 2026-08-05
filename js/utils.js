@@ -58,7 +58,8 @@ const Utils = {
 
   _luminance(r, g, b) { return 0.299 * r + 0.587 * g + 0.114 * b; },
 
-  /* 对图片做真实像素分析：主色调、亮度、对比度、配色构成、泛红指数等 */
+  /* 对图片做真实像素分析：主色调、亮度、对比度、配色构成、泛红指数等
+   * 返回额外区域信息：top/bottom/left/right 的主色，以及左右对称度 symmetry（0~100，越高越对称） */
   async analyzeImage(dataUrl, opts = {}) {
     const img = await Utils._loadImage(dataUrl);
     const maxDim = 220;
@@ -99,11 +100,49 @@ const Utils = {
       ? arr.filter(c => { const lum = Utils._luminance(c.r, c.g, c.b); return lum > 28 && lum < 232; })
       : arr).filter(c => c.ratio >= 0.025).slice(0, 6);
     const redness = +(avg.r - (avg.g + avg.b) / 2).toFixed(1);
+
+    // 区域主色（上/下/左/右），用于穿搭识别与体态对称判断
+    const regionDominant = (x0, y0, x1, y1) => {
+      const rb = {}; let rs = 0, gs = 0, bs = 0, rc = 0;
+      for (let y = y0; y < y1; y++) {
+        for (let x = x0; x < x1; x++) {
+          const i = (y * w + x) * 4;
+          const a = data[i + 3];
+          if (a < 125) continue;
+          const r = data[i], g = data[i + 1], b = data[i + 2];
+          rs += r; gs += g; bs += b; rc++;
+          const key = (r >> 4) + '-' + (g >> 4) + '-' + (b >> 4);
+          let bk = rb[key];
+          if (!bk) { bk = rb[key] = { r: 0, g: 0, b: 0, n: 0 }; }
+          bk.r += r; bk.g += g; bk.b += b; bk.n++;
+        }
+      }
+      if (rc === 0) return { avg: { r: 0, g: 0, b: 0 }, dominant: [] };
+      const rarr = Object.values(rb).map(b => ({ r: Math.round(b.r / b.n), g: Math.round(b.g / b.n), b: Math.round(b.b / b.n), ratio: b.n / rc })).sort((a, b) => b.ratio - a.ratio);
+      const rdom = (opts.clothing ? rarr.filter(c => { const lum = Utils._luminance(c.r, c.g, c.b); return lum > 28 && lum < 232; }) : rarr).filter(c => c.ratio >= 0.03).slice(0, 4);
+      return { avg: { r: Math.round(rs / rc), g: Math.round(gs / rc), b: Math.round(bs / rc) }, dominant: rdom.length ? rdom : (rarr[0] ? [rarr[0]] : []) };
+    };
+    const midX = Math.floor(w / 2), midY = Math.floor(h / 2);
+    const top = regionDominant(0, 0, w, midY);
+    const bottom = regionDominant(0, midY, w, h);
+    const left = regionDominant(0, 0, midX, h);
+    const right = regionDominant(midX, 0, w, h);
+    // 左右对称度：左右半区平均色差异越小越对称（0~100）
+    const dL = Math.sqrt((left.avg.r - right.avg.r) ** 2 + (left.avg.g - right.avg.g) ** 2 + (left.avg.b - right.avg.b) ** 2);
+    const symmetry = Math.max(0, Math.min(100, Math.round(100 - dL / 2.2)));
+
     return {
       width: img.width, height: img.height,
       avg, brightness, contrast, redness,
       dominant: dominant.length ? dominant : (arr[0] ? [arr[0]] : []),
-      topColor: (dominant[0] || arr[0] || avg)
+      topColor: (dominant[0] || arr[0] || avg),
+      regions: {
+        top: { avg: top.avg, dominant: top.dominant, topColor: top.dominant[0] || top.avg },
+        bottom: { avg: bottom.avg, dominant: bottom.dominant, topColor: bottom.dominant[0] || bottom.avg },
+        left: { avg: left.avg, dominant: left.dominant, topColor: left.dominant[0] || left.avg },
+        right: { avg: right.avg, dominant: right.dominant, topColor: right.dominant[0] || right.avg },
+      },
+      symmetry
     };
   },
 
